@@ -1,0 +1,37 @@
+/* /new only. The base rules match styles/home.css so the intake form reads as part of the waitlist site. */
+@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:400;src:url(/fonts/inter-400.woff2) format("woff2")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:500;src:url(/fonts/inter-500.woff2) format("woff2")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:600;src:url(/fonts/inter-600.woff2) format("woff2")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:700;src:url(/fonts/inter-700.woff2) format("woff2")}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#0a0a0a;--mute:#6b6b6b;--line:#e4e4e4;--accent:#0047ff;--bad:#b8350f}
+body{font-family:Inter,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1040px;margin:0 auto;padding:0 32px}
+header{border-bottom:1px solid var(--line)}
+header .wrap{display:flex;justify-content:space-between;align-items:center;height:64px;font-size:13px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+header span:last-child{color:var(--mute);font-weight:500}
+main .wrap{padding-top:96px;padding-bottom:120px}
+.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:28px}
+h1{font-size:clamp(40px,6.4vw,64px);line-height:1.02;letter-spacing:-.035em;font-weight:700;max-width:14ch}
+.pitch{font-size:20px;line-height:1.5;color:var(--mute);margin-top:28px;max-width:40ch}
+footer{border-top:1px solid var(--line)}footer .wrap{height:64px;display:flex;align-items:center;font-size:12px;color:var(--mute)}
+footer a{margin-left:24px}footer a:hover{color:var(--ink)}
+
+.intake{max-width:640px;margin-top:64px}
+.intake fieldset{border:0;border-top:1px solid var(--ink);padding-top:24px;margin-bottom:48px}
+.intake legend{float:left;width:100%;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+.intake label{display:block;font-size:15px;font-weight:600;margin-top:24px;margin-bottom:8px}
+.intake label span{display:block;font-weight:400;font-size:14px;color:var(--mute);margin-top:2px}
+.intake input,.intake textarea,.intake select{display:block;width:100%;border:1px solid var(--line);padding:14px 16px;font:inherit;font-size:15px;line-height:1.5;color:var(--ink);background:#fff;border-radius:0;outline:none;resize:vertical}
+.intake input:focus,.intake textarea:focus,.intake select:focus{border-color:var(--ink)}
+.intake [aria-invalid=true]{border-color:var(--bad)}
+.intake .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.err{font-size:13px;color:var(--bad);margin-top:6px}
+.intake button{border:0;background:var(--ink);color:#fff;padding:18px 28px;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:0}
+.intake button:hover{background:var(--accent)}
+.intake button:disabled{background:var(--mute);cursor:wait}
+.intake > .err{margin:-24px 0 16px}
+
+@media (max-width:720px){
+  .wrap{padding:0 16px}
+  main .wrap{padding-top:56px;padding-bottom:72px}
+  .intake .row{grid-template-columns:1fr;gap:0}
+}
