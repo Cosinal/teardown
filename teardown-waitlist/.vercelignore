@@ -1,6 +1,0 @@
-signups.csv
-server.js
-*.log
-node_modules
-.env*
-screenshot*.png
