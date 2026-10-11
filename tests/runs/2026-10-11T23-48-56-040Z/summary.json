@@ -1,0 +1,41 @@
+[
+  {
+    "slug": "a-teardown",
+    "teardown_id": "5aR_3fv3zW6K",
+    "queries": 8,
+    "ambiguities": 3,
+    "web_searches": 10,
+    "sources": 30,
+    "search_results": 86,
+    "intake_usd": 0.0288,
+    "research_usd": 0.9476,
+    "total_usd": 0.9764,
+    "research_seconds": 58
+  },
+  {
+    "slug": "b-dog-grooming",
+    "teardown_id": "GtWuEwXwBzm5",
+    "queries": 7,
+    "ambiguities": 0,
+    "web_searches": 10,
+    "sources": 23,
+    "search_results": 91,
+    "intake_usd": 0.0181,
+    "research_usd": 1.0473,
+    "total_usd": 1.0654,
+    "research_seconds": 63
+  },
+  {
+    "slug": "c-nav-reconciliation",
+    "teardown_id": "Dyh4YsqoKJAH",
+    "queries": 7,
+    "ambiguities": 3,
+    "web_searches": 10,
+    "sources": 25,
+    "search_results": 93,
+    "intake_usd": 0.0234,
+    "research_usd": 1.1072,
+    "total_usd": 1.1306,
+    "research_seconds": 66
+  }
+]

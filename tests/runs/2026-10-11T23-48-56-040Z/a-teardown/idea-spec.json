@@ -1,0 +1,66 @@
+{
+  "name": "Online business idea teardowns",
+  "customer": "First-time founders deciding whether to pursue a business idea, likely pre-launch and paying out of pocket",
+  "problem": "I want a quick, cheap, trustworthy read on my idea's market so I can decide go or no-go before investing time and money.",
+  "revenue_model": {
+    "price": "$5–10 per report (one-time)",
+    "billing": "one_time",
+    "notes": "Pay per report; each report is a one-page readout of competitors, pricing, customers and gaps. No tiers or bundles stated."
+  },
+  "category": "Business idea validation / market research reports",
+  "geography": {
+    "scope": "online",
+    "places": []
+  },
+  "search_queries": [
+    {
+      "query": "best business idea validation tools for founders",
+      "purpose": "competitors"
+    },
+    {
+      "query": "AI market research report for startup idea",
+      "purpose": "competitors"
+    },
+    {
+      "query": "how to validate a business idea yourself competitor research template",
+      "purpose": "competitors"
+    },
+    {
+      "query": "startup idea validation report pricing",
+      "purpose": "pricing"
+    },
+    {
+      "query": "first time founder validate startup idea before building reddit",
+      "purpose": "customers"
+    },
+    {
+      "query": "market research tool reviews solo founders complaints",
+      "purpose": "customers"
+    },
+    {
+      "query": "new business applications per year statistics",
+      "purpose": "demand"
+    },
+    {
+      "query": "business idea validation search interest trend",
+      "purpose": "demand"
+    }
+  ],
+  "ambiguities": [
+    {
+      "field": "revenue_model",
+      "issue": "Price is a $5–10 range with no rule for what sets the price within it.",
+      "assumption": "Treat as a single report priced in the $5–10 band; research will compare against per-report and subscription alternatives."
+    },
+    {
+      "field": "customer",
+      "issue": "First-time founders could mean tech startup founders or anyone starting a small local business, which changes competitors and channels.",
+      "assumption": "Include both startup and small-business founders; research notes which segment alternatives target."
+    },
+    {
+      "field": "revenue_model",
+      "issue": "One-time billing per report may not fit founders who evaluate several ideas, but repeat purchase is not addressed.",
+      "assumption": "Assume pay-per-report with no bundles; research will check whether competitors use bundles or subscriptions."
+    }
+  ]
+}

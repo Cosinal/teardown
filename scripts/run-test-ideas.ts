@@ -3,6 +3,7 @@
 //
 //   npm run test:ideas            # also stores teardowns + sources in Neon when DATABASE_URL is set
 //   npm run test:ideas -- --no-db # API only
+//   npm run test:ideas -- --only b-dog-grooming
 //
 // Needs ANTHROPIC_API_KEY (and optionally DATABASE_URL) in .env.local or the environment.
 
@@ -54,6 +55,8 @@ const IDEAS: { slug: string; brief: string; input: IntakeInput }[] = [
   },
 ];
 
+const only = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : undefined;
+const ideas = only ? IDEAS.filter((i) => i.slug === only) : IDEAS;
 const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
 
 async function run(input: IntakeInput): Promise<StagesResult & { id: string | null }> {
@@ -80,7 +83,11 @@ async function main() {
   const dir = join("tests/runs", stamp);
   console.log(`Writing to ${dir} (database: ${useDb ? "on" : "off"})`);
 
-  const results = await Promise.allSettled(IDEAS.map(async (idea) => {
+  if (!ideas.length) {
+    console.error(`No idea with slug ${only}. Slugs: ${IDEAS.map((i) => i.slug).join(", ")}`);
+    process.exit(1);
+  }
+  const results = await Promise.allSettled(ideas.map(async (idea) => {
     const r = await run(idea.input);
     const out = join(dir, idea.slug);
     mkdirSync(out, { recursive: true });
@@ -96,7 +103,7 @@ async function main() {
     return r;
   }));
 
-  const summary = IDEAS.map((idea, i) => {
+  const summary = ideas.map((idea, i) => {
     const res = results[i];
     if (res.status === "rejected") return { slug: idea.slug, error: String(res.reason) };
     const r = res.value;
@@ -108,7 +115,8 @@ async function main() {
       ambiguities: r.spec.ambiguities.length,
       web_searches: r.runs.reduce((n, x) => n + x.usage.web_search_requests, 0),
       sources: r.sources.length,
-      sources_with_excerpt: r.sources.filter((s) => s.excerpt).length,
+      search_results: new Set(r.responses.flatMap(({ message }) => message.content.flatMap((b) =>
+        b.type === "web_search_tool_result" && Array.isArray(b.content) ? b.content.map((x) => x.url) : []))).size,
       intake_usd: cost("intake"),
       research_usd: cost("research"),
       total_usd: Math.round((cost("intake") + cost("research")) * 1e4) / 1e4,

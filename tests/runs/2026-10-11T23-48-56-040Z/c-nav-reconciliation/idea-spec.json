@@ -1,0 +1,65 @@
+{
+  "name": "Private-markets NAV reconciliation software",
+  "customer": "Operations teams at Canadian and US pension funds that hold private-markets investments; the pension fund pays, ops analysts use it",
+  "problem": "Pension fund ops teams need to check private-markets NAV statements from GPs against their own records quickly and accurately, without manual spreadsheet work.",
+  "revenue_model": {
+    "price": "$2,000/month (subscription)",
+    "billing": "subscription",
+    "notes": "Flat monthly fee per customer as stated; no tiers, seat counts, fund/statement volume limits or currency specified."
+  },
+  "category": "Private markets investment operations / NAV reconciliation software",
+  "geography": {
+    "scope": "multi_country",
+    "places": [
+      "Canada",
+      "United States"
+    ]
+  },
+  "search_queries": [
+    {
+      "query": "private equity NAV reconciliation software for LPs",
+      "purpose": "competitors"
+    },
+    {
+      "query": "best alternative investment data automation tools for institutional investors capital account statements",
+      "purpose": "competitors"
+    },
+    {
+      "query": "Canoe Intelligence alternatives LP document extraction reconciliation",
+      "purpose": "competitors"
+    },
+    {
+      "query": "alternative investment operations software pricing per year limited partners",
+      "purpose": "pricing"
+    },
+    {
+      "query": "pension fund private markets operations manual reconciliation capital account statements challenges",
+      "purpose": "customers"
+    },
+    {
+      "query": "number of pension funds in Canada and US private markets allocation statistics",
+      "purpose": "demand"
+    },
+    {
+      "query": "LP private markets reporting data quality survey operations burden",
+      "purpose": "demand"
+    }
+  ],
+  "ambiguities": [
+    {
+      "field": "revenue_model",
+      "issue": "$2,000/month is unclear on whether it covers unlimited funds, statements and users or scales with portfolio size.",
+      "assumption": "Flat fee per pension fund regardless of number of funds, statements or users."
+    },
+    {
+      "field": "customer",
+      "issue": "Pension funds range from large in-house teams to small plans that outsource to administrators or custodians, who may be the real buyer.",
+      "assumption": "Mid-to-large pension funds with in-house private-markets operations teams."
+    },
+    {
+      "field": "problem",
+      "issue": "Reconciling NAV could mean matching GP statements to internal books, to custodian records, or validating GP-reported NAVs.",
+      "assumption": "Matching GP capital account/NAV statements against the pension fund's internal and custodian records."
+    }
+  ]
+}

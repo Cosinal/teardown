@@ -1,0 +1,1525 @@
+[
+  {
+    "message": {
+      "model": "claude-opus-5-5",
+      "id": "msg_011CfwLwyqcqy5kjZu88Qrqo",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSmAUKEAgSGAI4AUIIdGhpbmtpbmcSDMWMjw+Ap7C+ymdtmxoM0nR/Ts4p4a02qbp7IjD2wRz/uDbpbOSqWJ5VGbOY+Db2cfgzOIaXd9fVjliSoa/pjZJOw8+j1R4btngtV+AqtQRG+TkB3Be0pfnqo4KPQv8+J0ZVpOI3+S69cjuiOND8ERmBD/nvg00AnwIe4EyVx4ip6xPRJ/0Niw+69Yyp/k150BtHC0JnxjnIjVgckhagFU0oVqk+bul1dN7IiEQc2klRWQDA9XEufIiqjCrv0OVZd+LLxkLsgO0zrbkQzkwq7tBJfJSf7qFJuP9GQdHGn6SiUFbZhMMnDkfx6qhjHEIv0ZN35OnxgU8V840uPQCu1S+sB4TUh+i3EhbxqvoNzXtHiu2P4epCaKLLDC+SNcj8lBn3zz7Y5MiJ3zAEcqQ+bp//MJfj3TzRMV5PXg06Brvf7eaUfyN6Me8F8ZKrcv2hiPRZPAPXeTMg077zmBj7yo7DRUky89cFJbujY25yFSwdoI8V3geEadErrU5xvk+boCFsuhR6c3qelOecWY12AWFu5fqlWzJDFVRjHt/IQp8wLCUbbjTSG9kIlLtJsy39E0K3VxpIxkq3tOHOzH0D/h5W1QTDdJC3wcH5Qe0o+BAZ1nBbhBbQMW6cM8oBZt82a9jhPzbLm5Z/sJUsdTd8usQinqd9oaCAVXdsrs1uv03j6x8OkIiCq4YFbjMd/IX8si5s4aeAwXRzRx2amKJleD4xmx3bclrhV+BNsShHvsrnTV/V91j0pJi/dEtICkE8g4eEojPDcQ2twb7YlDpaPVbzMGhj3STZfuaIgaQ6KF6YI6cqeaTjXkLLWZWR/QZSL0tgYTme2ViS7/kbBNCwsL4KaRSYGAE="
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01PeBsY24u2YyMofYT9qC2ua",
+          "name": "web_search",
+          "input": {
+            "query": "private equity NAV reconciliation software for LPs"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01Lht8PcNNkUgCXzaXLnH3sv",
+          "name": "web_search",
+          "input": {
+            "query": "Canoe Intelligence alternatives LP document extraction reconciliation"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01TgwgrWKKHp4emBhZY6URac",
+          "name": "web_search",
+          "input": {
+            "query": "alternative investment operations software pricing per year limited partners"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01PeBsY24u2YyMofYT9qC2ua",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Private Equity Portfolio Monitoring Software: What Family Offices Actually Need in 2026",
+              "url": "https://masttro.com/insights/private-equity-portfolio-monitoring-software",
+              "page_age": "125 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Fund Administration Software for Private Equity",
+              "url": "https://www.getcaruso.com/en-us/solutions/private-equity",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Equity Holdings Reconciliation",
+              "url": "https://www.fundrecs.com/private-equity-holdings-reconciliation",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Best Private Equity Software Solutions (Top 5 Platforms in 2026)",
+              "url": "https://fundcount.com/best-private-equity-software-solutions/",
+              "page_age": "144 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "3 Best Private Equity Partnership Accounting Software Platforms (2026)",
+              "url": "https://fundcount.com/best-private-equity-partnership-accounting-software/",
+              "page_age": "140 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "NAV Reporting",
+              "url": "https://flowinc.com/lps/nav-reporting",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "6 Best Investor Portal Software for Private Equity",
+              "url": "https://markrgraham.com/6-best-investor-portal-software-for-private-equity/",
+              "page_age": "329 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Fund Accounting Software for Private Equity",
+              "url": "https://relevantequityworks.com/platform/fund-accounting-software/",
+              "page_age": "130 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Equity Accounting Software",
+              "url": "https://investorportalpro.com/accounting/private-equity-accounting-software.html",
+              "page_age": "644 days ago"
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01Lht8PcNNkUgCXzaXLnH3sv",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Best Canoe Alternatives & Competitors",
+              "url": "https://sourceforge.net/software/product/Canoe/alternatives",
+              "page_age": "1784 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence Alternatives: Alts Data & M&A",
+              "url": "https://www.corpdev.ai/research/canoe-intelligence-alternatives",
+              "page_age": "27 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "4 Best Data Extraction Software for Alternative Assets (2026)",
+              "url": "https://fundcount.com/best-data-extraction-software-for-alternative-assets/",
+              "page_age": "211 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "FundCount vs Canoe Intelligence (2026): Modern Alternative for Alternative Investment Management",
+              "url": "https://fundcount.com/fundcount-vs-canoe-intelligence/",
+              "page_age": "147 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence Launches Canoe Pro Tech, Expanding Platform Capabilities with New Technology Partnership Category - Canoe",
+              "url": "https://canoeintelligence.com/canoe-pro-tech-launches/",
+              "page_age": "591 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "page_age": "104 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Best AI Document Ingestion for Alt Assets",
+              "url": "https://www.myfotech.com/blogs/whats-the-best-ai-document-ingestion-tool-for-fund-and-alternative-asset-data",
+              "page_age": "68 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Best Canoe Intelligence Alternatives & Competitors in 2026",
+              "url": "https://www.trustradius.com/products/canoe-intelligence/competitors",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "app.dealroom.co",
+              "url": "https://app.dealroom.co/companies/canoe_intelligence/team",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01TgwgrWKKHp4emBhZY6URac",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Private Equity Portfolio Management Software",
+              "url": "https://www.limina.com/private-equity-portfolio-management-software",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Alternative Investment Management Software: Essentials for Investors",
+              "url": "https://copiawealthstudios.com/blog/alternative-investment-management-software-essentials-for-investors",
+              "page_age": "587 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Alternative investment management software [incl. limited partners]",
+              "url": "https://www.limina.com/alternative-investment-management-software",
+              "page_age": "1314 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Albourne Partners",
+              "url": "https://en.wikipedia.org/wiki/Albourne_Partners",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "4 Best Alternative Investment Fund Management Software (2026)",
+              "url": "https://fundcount.com/best-alternative-investment-fund-management-software/",
+              "page_age": "209 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Alternative Investment Management Software: Bringing Clarity to Complex Portfolios",
+              "url": "https://masttro.com/insights/alternative-investment-management-software",
+              "page_age": "396 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "eFront Invest GP - Fund Management",
+              "url": "https://www.efront.com/en/alternative-investment-software/efront-invest-general-partner",
+              "page_age": "591 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "4 Best Software for Managing Alternative Investments (2026)",
+              "url": "https://fundcount.com/best-software-solutions-for-managing-alternative-investments/",
+              "page_age": "210 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Pricing - Investment Management System",
+              "url": "https://www.limina.com/pricing",
+              "page_age": "491 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Alternative Investment Software",
+              "url": "https://www.alternativesoft.com/alternative-investment-software.html",
+              "page_age": "193 days ago"
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_012kXQAoX7fJC11J6KhA5JmF",
+          "name": "web_search",
+          "input": {
+            "query": "pension fund private markets operations manual reconciliation capital account statements challenges"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01E5eFwPtA9vKK4pz3JoW7Jn",
+          "name": "web_search",
+          "input": {
+            "query": "number of pension funds in Canada and US private markets allocation statistics"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01MNuiCY18XaPH43xnKAvXR9",
+          "name": "web_search",
+          "input": {
+            "query": "LP private markets reporting data quality survey operations burden"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_012kXQAoX7fJC11J6KhA5JmF",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "A Complete Guide to Portfolio Reconciliation for PE Firms",
+              "url": "https://www.v7labs.com/blog/portfolio-reconciliation",
+              "page_age": "181 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Investment Reconciliation [examples, processes & best practices]",
+              "url": "https://www.limina.com/blog/investment-reconciliation",
+              "page_age": "374 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Assets Portfolio Accounting: Why Legacy Systems Don’t Scale - FundGuard",
+              "url": "https://www.fundguard.com/private-assets-portfolio-accounting/",
+              "page_age": "108 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "CAPITAL FORMATION 2 Investing Pension Contributions in Private",
+              "url": "https://rpc.cfainstitute.org/sites/default/files/-/media/documents/article/position-paper/capital-formation-investing-pension-contributions-in-private-markets.pdf",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Asset Management for Family Offices in 2026",
+              "url": "https://www.asora.com/blog/private-asset-management",
+              "page_age": "221 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Public Pension Fund Management Governance, Accountability,",
+              "url": "https://documents1.worldbank.org/curated/en/640001468782368218/pdf/302250PAPER0public0pension.pdf",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Understanding Private Equity Fund Accounting - Ultimus",
+              "url": "https://www.ultimusfundsolutions.com/blog/understanding-private-equity-fund-accounting/",
+              "page_age": "466 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "The Growth of Private Financial Markets",
+              "url": "https://peri.umass.edu/wp-content/uploads/joomla/images/publication/WP600.pdf",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "OECD Working Papers on Insurance and Private Pensions No. 38",
+              "url": "https://www.oecd-ilibrary.org/managing-investment-risk-in-defined-benefit-pension-funds_5kmjnr3sr2f3.pdf",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01E5eFwPtA9vKK4pz3JoW7Jn",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Pension Fund Investment in Private Equity and Venture ...",
+              "url": "https://www.pm-research.com/content/iijpriveq:::7:::2:::64.full.pdf?implicit-login=true&sigma-token=2hbIu4yj1_x7ZpLY9BHGthqzDf3ys53l8QuQRgDG9qA",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canadian pensions have 47% in US assets, only 13% in Canada",
+              "url": "https://www.benefitsandpensionsmonitor.com/pensions/defined-benefit/canadian-pensions-have-47-in-american-assets-and-just-13-in-canada/393122",
+              "page_age": "235 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "76 Pension Funds",
+              "url": "https://praxisrock.com/resources/investors/pension-funds",
+              "page_age": "89 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Assets of pension funds in Canada 2021",
+              "url": "https://www.statista.com/statistics/421354/pension-funds-assets-canada/",
+              "page_age": "824 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Institutional investor trends reveal the value of investing in Canada",
+              "url": "https://www.financialpipeline.com/expert/canadian-pension-plans-domestic-equity-allocation-alongside-global-pension-peers/",
+              "page_age": "157 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canada Pension Funds Market By Size, Share and Forecast 2030F",
+              "url": "https://www.techsciresearch.com/report/canada-pension-funds-market/27224.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "© OECD",
+              "url": "https://www.gov.br/previdencia/pt-br/outros/imagens/arquivos/office/3a_081014-105104-460.pdf",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canada Pension Fund Market Size, Share Analysis & Industry Growth Report - 2030",
+              "url": "https://www.mordorintelligence.com/industry-reports/canada-pension-fund-market",
+              "page_age": "480 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "PENSION MARKETS IN FOCUS Preliminary 2024 data - June 2025",
+              "url": "https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/asset-backed-pensions/PMF%202025%20-%20Preliminary%202024.pdf",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01MNuiCY18XaPH43xnKAvXR9",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Solving the Private Market Data Transfer Challenge for LP Investors",
+              "url": "https://carta.com/blog/data-transfer-challenge-lp-investors/",
+              "page_age": "313 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Markets Data Expansion: What LPs and GPs Need to Know",
+              "url": "https://www.nasdaq.com/articles/analytics/private-markets-data",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "How to Choose Private Markets Reporting Software for a Family Office",
+              "url": "https://masttro.com/insights/private-markets-reporting-software",
+              "page_age": "103 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Markets Investor Reporting: Closing the LP Transparency Gap",
+              "url": "https://www.arcesium.com/blog/private-markets-investor-reporting-lp-transparency-gap",
+              "page_age": "164 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private Markets Need Better Data Infrastructure Now",
+              "url": "https://www.wealthmanagement.com/investing-strategies/private-markets-have-institutionalized-but-operations-have-not",
+              "page_age": "158 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Private markets: data strategy and management challenges - Davies",
+              "url": "https://davies-group.com/consulting/blog/private-markets-data-strategy/",
+              "page_age": "261 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Can a united front fix private markets’ data dilemma?",
+              "url": "https://the-drawdown.com/article/can-a-united-front-fix-private-markets-data-dilemma",
+              "page_age": "74 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "How Data Transforms Private Market Investing and Unlocks Hidden Alpha",
+              "url": "https://carta.com/blog/hidden-alpha-private-market/",
+              "page_age": "313 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Solving the Data Quality Problem in Private Markets",
+              "url": "https://insights.apexe3.com/articles/solving-the-data-quality-problem-in-private-markets-ai-strategies-for-asset-managers",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQS3QoKEAgSGAI4AUIIdGhpbmtpbmcSDP1rF+htrNmQpQzn1BoMOoOn+5SCFxAcyqeUIjCyiZkA45YW/RG+3o/2CXZX0iRqVoHQ5M42YJo+Pd8SUqDhi2lYHDaIVbfAmmBVFkwq+gm0Q/svvd6sQWTEg5u2xEjeIG/0qBo0MEFU7kcVyuF1984GrZjvItOCEBG04YJy/zbEcPj31DW1RLNzRpdBd0XE17K0ZDyAOEu+pBJbArQkSdGbREP645G+C4nLsYVRjElTQE5tBb0udQkbhCqdbI4uepWT4tdElbFd4QthoEyrC6XiA3sti6Cdmw/MDfLLPRywhWIQPhANB6zmnG9NpARxpwwYPrMU/5opA6MA+Le10pz/a4ps5MAcF8ZI2NfAEyCwTobfILOCUSTXFgkB3PNQUjFoezCrtYE5Jey8nmPKs+Jr8IDss5lXYnxO84nFmS0WjKPKa7h5ZqTkhFBChDEYvlV6tEhW4BafcH3EsirGHQ2MHQyTgFgowgyZcWa/WYDlKbZYmkLNB5oIQtQLzwUxAKkzqs0C895LSSteHPyUGYOtjg0zJvE6N9lpH/WeAxT+EL6OEfg6T9qh1UDGx7XZQNqyvUCxLs7xW+lduseK0qvsSHRQ5N5eGPDMCWNi0F24FKH1svz6InZ2wX30ci41IUbT1SqezA+qZ3hQUYgM+Gjyton6N2ERrSvs88k0wbUix8qj6GUNuGj930M0i/LSFlIYcAvn8/OQT7OLiDAgNLMRkcRFM16AqL9Q05qcYfnMvmpBdquRK1REqadN+ZJu5q41xcAVOmnA4MtLWIbbm31bJJ1OACKLaXWXyqNzRGcsK0dS81zU/ZwzyoopgD0JTaEgam1zOsYGKO5TooOgmbigfJOifnTUEmT/lDXJRqxuDHC4e5+bCTqO8L8BbGgX3Jf7iq5I84/4AVKHTRIeGvVZMZgqdyBdtZj8T5WgjK+fIrdIWTkr+dDyI+lEmoP8g9HMEWIZNwXhHaxnWwnV83YQ1KCk9u2UT8I1ayId9p7uQlSRltQJmm9TXsp1hut6A5D//lnnwmcjH+lvKAo4vCv4obAAE9CLOl+ZQrSwmi/7aiWimaGkQHaggjuXQjlI0MLqTQpmyoBRvnLWkNpzG1MkUu4WAyqL9yWAMD4H13oU8Y89eRSCig83POBqqi19Xjh52zbuRI7y/1443hD11wwe+rzoX7bgbCWt3QDS8KQW45KU/lEsbdXvg3dAxib3R1Pr2jIaKxrBSYQFUkVVjfQ4kocv5R85TB+krHASAGvDnaPE+RIOl0fjygEzEP3ibeFMLbJg6jqgnk1Dz4qlBYETijT7j3QD3n5bAcqWkxDqr1yzMJeaiaSzZVcDdvgUk2turWzcSOggd17drjWNtK+e84vkf3du+7wMWCkT1eKs/F8p5rC408SvO5FSVwM0JIQMpixHQANX6duPJaYIbBHrV0kFotLX5yVOshPPRbPeyb8PpL7CXNn5cbQrtWCzudP6c5q8Trm3Uy3cbIOtGnx6Bhqnxt1oqBmvvtNEXYSb6rpTbp8oVamP5zd/G1wKBYKnZguR/0xYmeJzrWA6HTvH/PCuoxIIsKpi52v+TFYVntp0ReTrm8quw24QQ5cXkWCP6VfNY7K3ZIqAcpPNbj1uFIugIy+j7LyYp807SIq4nm+7bch04/2Pnu+ioYJsHEphn1nQ0lL4pix0jTg3cpTfVvnhQjf15oLmyiXz29jNClj1nn8iQ6ERDqtkrJaW2z/AZH3kceSrVuyFkdweOjGLx0hLqonmhJB/hR/hXEZ7ktweRhNboWJxS3YkZMxAN66DzF+u52E4RRgB"
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01PVFNoG7eGFFV31yakkjC5X",
+          "name": "web_search",
+          "input": {
+            "query": "Canoe Intelligence pricing cost per year"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01FKQdQENPbRcfjsLYRXZYf1",
+          "name": "web_search",
+          "input": {
+            "query": "Arch alternative investments software pricing plans"
+          }
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01QKDyzZHG32ZSUY7Z9zVgch",
+          "name": "web_search",
+          "input": {
+            "query": "Census Bureau annual survey of public pensions number of state and local systems"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01PVFNoG7eGFFV31yakkjC5X",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Manual Data Entry is Costing Investment Firms Up to $4 Million a Year. Why? - Canoe",
+              "url": "https://canoeintelligence.com/manual-data-entry-is-costing-investment-firms-up-to-4-million-a-year-why/",
+              "page_age": "580 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence IPO Timeline and Financing Details - Forge",
+              "url": "https://forgeglobal.com/canoe-intelligence_ipo/",
+              "page_age": "821 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Buy and Sell Canoe Intelligence Stock, $312.27M Valuation - Forge",
+              "url": "https://forgeglobal.com/canoe-intelligence_stock/",
+              "page_age": "40 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence Stock",
+              "url": "https://www.hiive.com/securities/canoe-intelligence-stock",
+              "page_age": "345 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence Private Stock Price & Valuation ($320M)",
+              "url": "https://www.premieralts.com/companies/canoe-intelligence",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Data as of April 2021* Powered By Canoe Intelligence Product Overview",
+              "url": "https://ilpa.org/wp-content/uploads/2021/05/ILPA-Technology-Vendor-Factsheet-Canoe-Intelligence.pdf",
+              "page_age": "1989 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence",
+              "url": "https://canoeintelligence.com/",
+              "page_age": "153 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canoe Intelligence - Canoe",
+              "url": "https://canoeintelligence.com/solutions/canoe-intelligence/",
+              "page_age": "236 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "$140k Budget: Canoe Intelligence Seeks API Integration & RPA",
+              "url": "https://upscalemethod.com/wp-content/uploads/2024/08/CanoeIntelligence_NY_API-Integration_RPAExpertise_140K.pdf",
+              "page_age": "794 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "2026 Best Software Awards are here!See the list",
+              "url": "https://www.g2.com/products/canoe-intelligence-canoe-intelligence/pricing",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01FKQdQENPbRcfjsLYRXZYf1",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Archway Software Pricing, Alternatives & More 2026",
+              "url": "https://www.capterra.com/p/80788/ATWeb/",
+              "page_age": "52 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Archeo Software Pricing, Alternatives & More 2026",
+              "url": "https://www.capterra.com/p/182832/Archeo/",
+              "page_age": "212 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Top Arch Alternatives in 2026",
+              "url": "https://slashdot.org/software/p/Arch.co/alternatives",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Top Arch Alternatives in 2025 - Software",
+              "url": "https://slashdot.org/software/p/Arch-Labs/alternatives",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Arch - Crunchbase Company Profile & Funding",
+              "url": "https://www.crunchbase.com/organization/arch-7c76",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Arch, a Next-Gen Platform for Alternative Asset Management, Raises $5.5 Million from Craft Ventures to Automate Everything Except Advice for Private Investors",
+              "url": "https://www.prnewswire.com/news-releases/arch-a-next-gen-platform-for-alternative-asset-management-raises-5-5-million-from-craft-ventures-to-automate-everything-except-advice-for-private-investors-301439812.html",
+              "page_age": "1768 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Oak HC/FT",
+              "url": "https://www.oakhcft.com/blog-post/investing-in-arch-building-the-operating-system-for-private-markets",
+              "page_age": "388 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Arch, an Alts Software Used by Over 180 Family Offices, Raises $52 Million in Funding",
+              "url": "https://www.modus.news/arch-an-alts-software-used-by-over-180-family-offices-raises-52-million-in-funding/",
+              "page_age": "391 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Archibus Pricing Overview",
+              "url": "https://www.g2.com/products/archibus/pricing",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01QKDyzZHG32ZSUY7Z9zVgch",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Census Bureau Releases 2024 Annual Survey of Public Pensions",
+              "url": "https://www.census.gov/newsroom/press-releases/2025/2024-annual-survey-public-pensions.html",
+              "page_age": "500 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Census Bureau Releases 2025 Annual Survey of Public Pensions",
+              "url": "https://www.census.gov/newsroom/press-releases/2026/2025-aspp.html",
+              "page_age": "150 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "2011 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2011/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "g15 aspp sl",
+              "url": "https://www.census.gov/content/dam/Census/library/publications/2016/econ/g15-aspp-sl.pdf",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "Annual Survey of Public Pensions (ASPP)",
+              "url": "https://www.census.gov/aspp",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "2009 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2009/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "2008 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2008/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "2013 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2013/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "2014 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2014/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            },
+            {
+              "type": "web_search_result",
+              "title": "2015 Annual Survey of Public Pensions: State & Local Tables",
+              "url": "https://www.census.gov/data/tables/2015/econ/aspp/aspp-historical-tables.html",
+              "page_age": null
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "CAQSgwgKEAgSGAI4AUIIdGhpbmtpbmcSDMh8pDQXcatBTieb4xoMzzCIvpDzoQZpmDbXIjDhYh1MfQo0vRTUTDF1X5ev8la9b7566RyuPW7fRJVsrLR6Q06ODhYLRjcs8qKqisAqoAd2+gfsisRC7aSYsmKIVOsXFf3aGY2mkpZTJW65miiFakpeGQ8t9P66XgLPn+gDzwg5Dl16Cmn4jVQmkjKnCMjvIEXl3zpB5ruhDSKop/v2sS6gaBcbVb3mEQ1h5jOeAxD6Bw2ksRigYGAuR1+lWArpOxjsIJZ09C/cOuTTXKMQMJzvtQHqwXcqxtdQl7xqazHJP1JnEsuXlMzW/JqehES+dAExsjjNcngQUFgcV20cFPCMgCUQptYbpE28nxhMW5j/GgvOV9tPLUGeUr0sOszZR8LuXakozspMwZ8mtQYZkXbkyLoaV72iWxGUzNk3Xago0Ki1M8yYhBK+qWzEmXHxBlVMD9potgXqszFv4O5LphLbn5iQed84wbHOBhKBTaZLPxVAVCMtdu7RXTUV81/72ENCHHiFzv2Hm6vy6qigLA9q7viK67Vs/WprXC+/sSt78J3QXwjm3DRTyIol/AGhfCMSv4KPkxcFZySZOKJRqqI8267gKlc5zixvu1tptPRsD/8O8hzE72kZURRNEeIoAq/pNYfHyOfdrY/Ku+MDM4kJkAroJVHl+kQ0Df62XutizWnu6yoY3RH+VJkbmX9FjClazdyYEzdRUGZMZ4CS72ZW/+7sz8EXWOINBssI8rOu7qXByVvcpcvIhmxY7vBkYCD3GmuyUfh2GyY1OscnP4ALTEoIcleT2nmRLwZwryw0Oen+zz8PeIc6GS2PmDl3m+WqVNx7ODks9mfTLw3ybmRnGcqOm9y7uOrHFpJ3RXdlaETPHVgaZBKTdrpH+RvvELv7NdGVbwrR1mRFCplXX9rOpQBfcTyuQtbEoSVmxNaoDZGljVPTmWW0HDwTG5YNRDAugLIeKnhK6V5Ei38wlha70CjwZSvCG2HZF1YbnuO3fyueK6mk7dYOqSACGpvbwcP6apmwvRO/mx431NTief+0qJ4jdNCbFbjjHMGN/FrhMSKYltuf6dn3186gfODFh5xL+LkF4CtCvG+r+jJd6SZXp0T8RdYWIBFEPbcxZ+fnMlQMk+4RtPQgc9l0f6Z/v+SsMhy99AX4RqFfaqVtY0mKDI6fRN8Tp15O7igvqdHZRLA9FIztdbd6KMhMk4w5rUMPuDkXhtPjFbCgUXaeXZ3FlxqjzivP3/UnpuHqx45OEVFkDkvXCPQUuKBzGQj7DnEBilv0gXIBXIxMPEMXsemEYx/b7CqealSVZuUuQ8TZRk5oU1MoGzzx8w0XBr4WGAE="
+        },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_01FoKEvXancbuMjEPYDm1GKk",
+          "name": "web_search",
+          "input": {
+            "query": "Statistics Canada registered pension plans number of plans members 2024"
+          }
+        },
+        {
+          "type": "web_search_tool_result",
+          "tool_use_id": "srvtoolu_01FoKEvXancbuMjEPYDm1GKk",
+          "content": [
+            {
+              "type": "web_search_result",
+              "title": "Canadian pension plan membership is rising, data shows",
+              "url": "https://www.benefitsandpensionsmonitor.com/pensions/retirement-planning/canadian-pension-plan-membership-is-rising-data-shows/393952",
+              "page_age": "72 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "The Daily — Pension plans in Canada, as of January 1, 2025",
+              "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/260728/dq260728a-eng.htm",
+              "page_age": "75 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Pension plans in Canada, as of January 1, 2024",
+              "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/250624/dq250624c-eng.pdf",
+              "page_age": "474 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "The Daily — Pension plans in Canada, as of January 1, 2024",
+              "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/250624/dq250624c-eng.htm",
+              "page_age": "474 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canada's private sector shed 25,800 pension members in 2024",
+              "url": "https://www.benefitsandpensionsmonitor.com/news/industry-news/canadas-private-sector-shed-25800-pension-members-in-2024/393957",
+              "page_age": "68 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Fewer private sector workers have pensions. What does it mean for retirement? - National",
+              "url": "https://globalnews.ca/news/11996927/private-sector-workers-pensions/",
+              "page_age": "73 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Registered pension plan sponsors reporting increased membership: Stats Can",
+              "url": "https://www.benefitscanada.com/news/bencan/registered-pension-plan-sponsors-reporting-increased-membership-stats-can/",
+              "page_age": "68 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "How many workers have a pension plan in Canada?",
+              "url": "https://www.hcamag.com/ca/specialization/benefits/how-many-workers-have-a-pension-plan-in-canada/584351",
+              "page_age": "73 days ago"
+            },
+            {
+              "type": "web_search_result",
+              "title": "Canadian pension plan membership is rising, data shows",
+              "url": "https://www.wealthprofessional.ca/news/industry-news/canadian-pension-plan-membership-is-rising-data-shows/393140",
+              "page_age": "74 days ago"
+            }
+          ],
+          "caller": {
+            "type": "direct"
+          }
+        },
+        {
+          "type": "thinking",
+          "thinking": "",
+          "signature": "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"
+        },
+        {
+          "type": "text",
+          "text": "# Research notes: private-markets NAV reconciliation software for Canadian and US pension fund ops teams\n\n**What I couldn't find:**\n- **Blockers:** I ran out of searches before covering this. I have no sources on licences, rules or vendor-risk requirements (for example OSFI third-party risk guidance, SOC 2 expectations, or US public-pension procurement rules).\n- **Public prices:** none for Canoe, Fund Recs, Arch, Alkymi, Accelex or Nasdaq Solovis.\n- **Customer reviews:** no review-site complaints about any tool.\n- **Pension case studies:** no named pension fund customer case study for any of these vendors.\n- **Canadian plan count:** I found member counts but not the number of plans.\n\n## Alternatives\n\n**1. Canoe Intelligence (canoeintelligence.com).** This is the most direct LP-side competitor. One comparison calls it the "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "LP-side market leader in document extraction for alternatives. ",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "LP-side market leader in document extraction for alternatives"
+        },
+        {
+          "type": "text",
+          "text": ", and says it "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "The platform processes 1.6M+ documents per month, extracting over 200M data points.\n\n",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "processes 1.6M+ documents per month, extracting over 200M data points."
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Canoe excels at helping allocators and institutional investors process the documents they receive from GPs. ",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "Canoe excels at helping allocators and institutional investors process the documents they receive from GPs."
+        },
+        {
+          "type": "text",
+          "text": " However, "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "And while Canoe is excellent at extraction and collection, the analytics and downstream data governance sit with partners like Confluence and PrimePlu...",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "the analytics and downstream data governance sit with partners like Confluence and PrimePlus rather than being native to the platform."
+        },
+        {
+          "type": "text",
+          "text": "\n- **Pricing structure:** this comes from an ILPA vendor factsheet with data as of April 2021, so it may be out of date. "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "**Product Cost Structure**\n\nCanoe offers an annual licensing fee driven by total volume of unique commitments and subscriptions (line items) with tier...",
+              "url": "https://ilpa.org/wp-content/uploads/2021/05/ILPA-Technology-Vendor-Factsheet-Canoe-Intelligence.pdf",
+              "title": "Data as of April 2021* Powered By Canoe Intelligence Product Overview"
+            }
+          ],
+          "type": "text",
+          "text": "Canoe offers an annual licensing fee driven by total volume of unique commitments and subscriptions (line items) with tiering thresholds at certain volumes. As the volume of line items increases, the effective unit costs decrease. The license fee is also impacted by the number of investor portal connections desired."
+        },
+        {
+          "type": "text",
+          "text": " In addition, "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "In addition to the annual license fee, there is a one-time onboarding fee that\n\ncovers hands-on implementation, training and platform configuration. ",
+              "url": "https://ilpa.org/wp-content/uploads/2021/05/ILPA-Technology-Vendor-Factsheet-Canoe-Intelligence.pdf",
+              "title": "Data as of April 2021* Powered By Canoe Intelligence Product Overview"
+            }
+          ],
+          "type": "text",
+          "text": "there is a one-time onboarding fee that covers hands-on implementation, training and platform configuration."
+        },
+        {
+          "type": "text",
+          "text": "\n- **Users and data:** the factsheet literally says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Canoe does limit the number of users, data points or historical data. \n\n",
+              "url": "https://ilpa.org/wp-content/uploads/2021/05/ILPA-Technology-Vendor-Factsheet-Canoe-Intelligence.pdf",
+              "title": "Data as of April 2021* Powered By Canoe Intelligence Product Overview"
+            }
+          ],
+          "type": "text",
+          "text": "\"Canoe does limit the number of users, data points or historical data.\""
+        },
+        {
+          "type": "text",
+          "text": " It then says all of this is included in the quoted annual rate, so \"does limit\" is probably a typo for \"does not limit\". Treat this as unclear.\n- **Public price:** none. G2 says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Canoe Intelligence Pricing Overview\n\nClaim your profile now\nCanoe Intelligence has not provided pricing information for this product or service. ",
+              "url": "https://www.g2.com/products/canoe-intelligence-canoe-intelligence/pricing",
+              "title": "2026 Best Software Awards are here!See the list"
+            }
+          ],
+          "type": "text",
+          "text": "Canoe Intelligence has not provided pricing information for this product or service."
+        },
+        {
+          "type": "text",
+          "text": "\n\n**2. Fund Recs (fundrecs.com).** This is the closest match to the exact NAV-reconciliation job. "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Fund Recs automates the reconciliation of private equity holdings across administrators, GP statements, and internal records. ",
+              "url": "https://www.fundrecs.com/private-equity-holdings-reconciliation",
+              "title": "Private Equity Holdings Reconciliation"
+            }
+          ],
+          "type": "text",
+          "text": "Fund Recs automates the reconciliation of private equity holdings across administrators, GP statements, and internal records."
+        },
+        {
+          "type": "text",
+          "text": " Its matching engine can "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "- **Holdings matching engine** Compare commitments, NAV, unfunded amounts, distributions, and investment-level movements across all sources.\n",
+              "url": "https://www.fundrecs.com/private-equity-holdings-reconciliation",
+              "title": "Private Equity Holdings Reconciliation"
+            }
+          ],
+          "type": "text",
+          "text": "compare commitments, NAV, unfunded amounts, distributions, and investment-level movements across all sources."
+        },
+        {
+          "type": "text",
+          "text": " It also offers "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "- **Flexible rules and tolerances** Configure checks by fund, deal, or field to focus on meaningful differences.\n\n\n",
+              "url": "https://www.fundrecs.com/private-equity-holdings-reconciliation",
+              "title": "Private Equity Holdings Reconciliation"
+            }
+          ],
+          "type": "text",
+          "text": "flexible rules and tolerances"
+        },
+        {
+          "type": "text",
+          "text": " and lets users "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "- **Exception management** Assign, comment, and resolve breaks directly in the platform. ",
+              "url": "https://www.fundrecs.com/private-equity-holdings-reconciliation",
+              "title": "Private Equity Holdings Reconciliation"
+            }
+          ],
+          "type": "text",
+          "text": "assign, comment, and resolve breaks directly in the platform."
+        },
+        {
+          "type": "text",
+          "text": " No public pricing found.\n\n**3. Alkymi.** A comparison article calls Alkymi and Accelex the only two like-for-like substitutes for Canoe. It describes Alkymi as "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "** Alkymi (configurable, customer-owned extraction IP, per-fund pricing) and Accelex (European GP depth, now inside Carta) are the like-for-like alter...",
+              "url": "https://www.corpdev.ai/research/canoe-intelligence-alternatives",
+              "title": "Canoe Intelligence Alternatives: Alts Data & M&A"
+            }
+          ],
+          "type": "text",
+          "text": "configurable, customer-owned extraction IP, per-fund pricing"
+        },
+        {
+          "type": "text",
+          "text": ". Another review lists these limits: a "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "### Alkymi\n#### Limitations\n- Bundle-based approach may not cover all document types firms encounter\n- Less focus on downstream analytics or portal de...",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "bundle-based approach may not cover all document types firms encounter"
+        },
+        {
+          "type": "text",
+          "text": ", and it is a "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "### Alkymi\n#### Limitations\n- Bundle-based approach may not cover all document types firms encounter\n- Less focus on downstream analytics or portal de...",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "newer entrant with less track record than Canoe"
+        },
+        {
+          "type": "text",
+          "text": ". I found no website or price figures in the results.\n\n**4. Accelex, now part of Carta (carta.com).** "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Accelex was acquired by Carta in late 2025, signalling that extraction is becoming a feature of larger platforms rather than a standalone category. ",
+              "url": "https://www.daappa.com/best-data-extraction-software-2026",
+              "title": "Best Data Extraction Software for Alternative Assets (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "Accelex was acquired by Carta in late 2025, signalling that extraction is becoming a feature of larger platforms rather than a standalone category."
+        },
+        {
+          "type": "text",
+          "text": " Carta's own LP blog says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "## The efficiency benefits of streamlined data transfer\nBy automating data acquisition and extraction, LPs can significantly reduce the operational bu...",
+              "url": "https://carta.com/blog/data-transfer-challenge-lp-investors/",
+              "title": "Solving the Private Market Data Transfer Challenge for LP Investors"
+            }
+          ],
+          "type": "text",
+          "text": "by automating data acquisition and extraction, LPs can significantly reduce the operational burden associated with private markets investing."
+        },
+        {
+          "type": "text",
+          "text": " No public pricing found.\n\n**5. Arch (arch.co).** "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Private\n\nSeries B\n\nNew York, New York, United States\n\n251-500\n\narch.co\n\nEnterprise Software\n\nFinance\n\nFinancial Services\n\nFinTech\n\n## Company Performa...",
+              "url": "https://www.crunchbase.com/organization/arch-7c76",
+              "title": "Arch - Crunchbase Company Profile & Funding"
+            }
+          ],
+          "type": "text",
+          "text": "Arch digitally manages private investment operations for investors and investment advisors."
+        },
+        {
+          "type": "text",
+          "text": " It is "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Arch, a software used by more than 180 family offices to manage their alternative investments, announced on Monday that it raised $52 million in a Ser...",
+              "url": "https://www.modus.news/arch-an-alts-software-used-by-over-180-family-offices-raises-52-million-in-funding/",
+              "title": "Arch, an Alts Software Used by Over 180 Family Offices, Raises $52 Million in Funding"
+            }
+          ],
+          "type": "text",
+          "text": "used by more than 180 family offices"
+        },
+        {
+          "type": "text",
+          "text": " and raised a $52M Series B. In 2021 it said it "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Arch plans future platform expansions to support Foundations, Endowments, Pension Funds, and Sovereign Wealth Funds, alongside individual investors.\n\n",
+              "url": "https://www.prnewswire.com/news-releases/arch-a-next-gen-platform-for-alternative-asset-management-raises-5-5-million-from-craft-ventures-to-automate-everything-except-advice-for-private-investors-301439812.html",
+              "title": "Arch, a Next-Gen Platform for Alternative Asset Management, Raises $5.5 Million from Craft Ventures to Automate Everything Except Advice for Private Investors"
+            }
+          ],
+          "type": "text",
+          "text": "plans future platform expansions to support Foundations, Endowments, Pension Funds, and Sovereign Wealth Funds"
+        },
+        {
+          "type": "text",
+          "text": ". I found no evidence that it now serves pension funds, and no public pricing.\n\n**6. Limina (limina.com).** This is a broader LP investment management system, and the only one in the set with public pricing.\n- Limina says it is "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "# Private Equity Portfolio Management Software: A Guide for Limited Partners\n## Core LP Platforms\n### Limina\n**Know exactly what you'll pay**\n\nLimina ...",
+              "url": "https://www.limina.com/private-equity-portfolio-management-software",
+              "title": "Private Equity Portfolio Management Software"
+            }
+          ],
+          "type": "text",
+          "text": "the only LP platform with transparent public pricing: $70,000-$379,200/year, usage-based not AUM-based."
+        },
+        {
+          "type": "text",
+          "text": "\n- Pricing-page examples: "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "# Pricing\n## Example A\n$12.8k/m\n\n**5** Users\n\n**3** Funds\n\n**10k** Trades per year\n\n**1** Trade integration\n\nImport-export engine (integration tool)\n\n...",
+              "url": "https://www.limina.com/pricing",
+              "title": "Pricing - Investment Management System"
+            }
+          ],
+          "type": "text",
+          "text": "Example A $12.8k/m, 5 Users, 3 Funds, 10k Trades per year"
+        },
+        {
+          "type": "text",
+          "text": ", and Example B at $31.6k/m for 20 users and 20 funds.\n- Add-ons and enterprise: Operations Hub "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "It's priced separately as $1,200 per user per year.\n\n",
+              "url": "https://www.limina.com/pricing",
+              "title": "Pricing - Investment Management System"
+            }
+          ],
+          "type": "text",
+          "text": "is priced separately as $1,200 per user per year."
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "The pricing model is only applicable up to $400,000 per year fees. Above that we apply enterprise pricing.\n\n",
+              "url": "https://www.limina.com/pricing",
+              "title": "Pricing - Investment Management System"
+            }
+          ],
+          "type": "text",
+          "text": "The pricing model is only applicable up to $400,000 per year fees. Above that we apply enterprise pricing."
+        },
+        {
+          "type": "text",
+          "text": "\n- Setup: "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Limina will set up managed integrations at $ 5,000 - $ 10,000.",
+              "url": "https://www.limina.com/pricing",
+              "title": "Pricing - Investment Management System"
+            }
+          ],
+          "type": "text",
+          "text": "Limina will set up managed integrations at $ 5,000 - $ 10,000."
+        },
+        {
+          "type": "text",
+          "text": " Implementation takes "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "**Implementation**\n\n3 weeks to 4 months depending on portfolio complexity.\n\n",
+              "url": "https://www.limina.com/private-equity-portfolio-management-software",
+              "title": "Private Equity Portfolio Management Software"
+            }
+          ],
+          "type": "text",
+          "text": "3 weeks to 4 months depending on portfolio complexity."
+        },
+        {
+          "type": "text",
+          "text": "\n- Reconciliation: Limina says reconciliation "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "### Ensuring internal portfolio views are correct\nAfter that data is imported and processed, a reconciliation ensures the result (positions & cash bal...",
+              "url": "https://www.limina.com/blog/investment-reconciliation",
+              "title": "Investment Reconciliation [examples, processes & best practices]"
+            }
+          ],
+          "type": "text",
+          "text": "ensures the result (positions & cash balances) matches with the fund administrator and custodian."
+        },
+        {
+          "type": "text",
+          "text": "\n\n**7. Nasdaq Solovis.** This is an enterprise LP portfolio platform. Limina's guide lists it as "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "### Nasdaq Solovis\n**Implementation:** 3-6 months typical\n\n**Pricing:** Annual SaaS (custom)\n\n### Chronograph LP\n- **Query with AI:** LPs use Chrono A...",
+              "url": "https://www.limina.com/private-equity-portfolio-management-software",
+              "title": "Private Equity Portfolio Management Software"
+            }
+          ],
+          "type": "text",
+          "text": "Implementation: 3-6 months typical. Pricing: Annual SaaS (custom)"
+        },
+        {
+          "type": "text",
+          "text": ". The same guide also lists Chronograph LP. I found no website or price figures for either.\n\n**8. Manual workaround: spreadsheets and PDFs.** Nasdaq says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Many organizations managing multi-billion-dollar alternative portfolios still rely on quarterly PDFs, fragmented GP portals, and spreadsheets. ",
+              "url": "https://www.nasdaq.com/articles/analytics/private-markets-data",
+              "title": "Private Markets Data Expansion: What LPs and GPs Need to Know"
+            }
+          ],
+          "type": "text",
+          "text": "many organizations managing multi-billion-dollar alternative portfolios still rely on quarterly PDFs, fragmented GP portals, and spreadsheets."
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Analysts will typically review quarterly fund reports delivered as PDFs, then will extract key figures by hand and consolidate them into spreadsheets....",
+              "url": "https://www.nasdaq.com/articles/analytics/private-markets-data",
+              "title": "Private Markets Data Expansion: What LPs and GPs Need to Know"
+            }
+          ],
+          "type": "text",
+          "text": "Analysts will typically review quarterly fund reports delivered as PDFs, then will extract key figures by hand and consolidate them into spreadsheets. It's a process they have to do for dozens of fund companies, four times per year"
+        },
+        {
+          "type": "text",
+          "text": ".\n\n**Other adjacent platforms mentioned.** Masttro, Addepar and FundCount are LP-side platforms aimed mainly at family offices. Masttro advertises "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Meet compliance needs and scale efficiently – Masttro’s fixed pricing, built-in compliance tools and military-grade security remove barriers to scalin...",
+              "url": "https://masttro.com/insights/alternative-investment-management-software",
+              "title": "Alternative Investment Management Software: Bringing Clarity to Complex Portfolios"
+            }
+          ],
+          "type": "text",
+          "text": "fixed pricing"
+        },
+        {
+          "type": "text",
+          "text": ". FundCount's own reviews say Addepar and Allvue pricing is "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "**Pricing** Public pricing was not listed in the reviewed materials, so treat it as quote-based.\n\n",
+              "url": "https://fundcount.com/best-software-solutions-for-managing-alternative-investments/",
+              "title": "4 Best Software for Managing Alternative Investments (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "quote-based"
+        },
+        {
+          "type": "text",
+          "text": ". eFront, now part of BlackRock (Aladdin Alternatives), is described as "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "**eFront / Aladdin Alternatives** is strongest as an enterprise private-markets platform connected to whole-portfolio management.\n\n",
+              "url": "https://fundcount.com/best-software-solutions-for-managing-alternative-investments/",
+              "title": "4 Best Software for Managing Alternative Investments (2026)"
+            }
+          ],
+          "type": "text",
+          "text": "strongest as an enterprise private-markets platform connected to whole-portfolio management."
+        },
+        {
+          "type": "text",
+          "text": "\n\n## Customers\n\nBuyers are institutional LPs and allocators, but many vendor sources target family offices rather than pension funds.\n- **Pain points:**\n  - "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Data arrives from a multitude of sources – various GPs and investor portals – creating a fragmented and siloed overview. Each GP may use different ter...",
+              "url": "https://carta.com/blog/data-transfer-challenge-lp-investors/",
+              "title": "Solving the Private Market Data Transfer Challenge for LP Investors"
+            }
+          ],
+          "type": "text",
+          "text": "Data arrives from a multitude of sources – various GPs and investor portals – creating a fragmented and siloed overview. Each GP may use different terminology, provide varying levels of detail in their metric sets, and present data in a variety of formats."
+        },
+        {
+          "type": "text",
+          "text": "\n  - Masttro says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Manual re-keying is where reconciliation errors are born. ",
+              "url": "https://masttro.com/insights/private-equity-portfolio-monitoring-software",
+              "title": "Private Equity Portfolio Monitoring Software: What Family Offices Actually Need in 2026"
+            }
+          ],
+          "type": "text",
+          "text": "manual re-keying is where reconciliation errors are born."
+        },
+        {
+          "type": "text",
+          "text": "\n  - Nasdaq says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "As a result, inconsistencies and human error can degrade trust in the data before it even reaches an investment committee.\n\n\n\n",
+              "url": "https://www.nasdaq.com/articles/analytics/private-markets-data",
+              "title": "Private Markets Data Expansion: What LPs and GPs Need to Know"
+            }
+          ],
+          "type": "text",
+          "text": "inconsistencies and human error can degrade trust in the data before it even reaches an investment committee."
+        },
+        {
+          "type": "text",
+          "text": "\n  - FundGuard notes that "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "A misbooked distribution or a stale private valuation can sit in the books for weeks before anyone notices.\n\n",
+              "url": "https://www.fundguard.com/private-assets-portfolio-accounting/",
+              "title": "Private Assets Portfolio Accounting: Why Legacy Systems Don’t Scale - FundGuard"
+            }
+          ],
+          "type": "text",
+          "text": "a misbooked distribution or a stale private valuation can sit in the books for weeks before anyone notices."
+        },
+        {
+          "type": "text",
+          "text": "\n- **Industry survey:** in a CFA Institute survey, "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Nearly eight in 10 European LPs (78%) said they would completely withdraw from investments with poor reporting performance.^iv\n\n## Quarterly performan...",
+              "url": "https://www.arcesium.com/blog/private-markets-investor-reporting-lp-transparency-gap",
+              "title": "Private Markets Investor Reporting: Closing the LP Transparency Gap"
+            }
+          ],
+          "type": "text",
+          "text": "thirty-seven percent of global investment professionals said that frequency and accuracy of valuation reporting in private markets had \"substantial problems or even market failures,\""
+        },
+        {
+          "type": "text",
+          "text": "\n- **Canoe testimonial:** one customer on Canoe's homepage reports "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "We’re experiencing up to a 75% reduction in time spent on managing an even larger volume of alternative investments with the same resources compared t...",
+              "url": "https://canoeintelligence.com/",
+              "title": "Canoe Intelligence"
+            }
+          ],
+          "type": "text",
+          "text": "up to a 75% reduction in time spent on managing an even larger volume of alternative investments with the same resources"
+        },
+        {
+          "type": "text",
+          "text": ".\n- **Named customers:** Canoe's 2021 sample clients were wealth and advisory firms plus Hamilton Lane and Prime Buchholz. No pension funds were named.\n- **Complaints about the tools themselves:** none found on review sites.\n\n## Demand\n\n- **US public pension systems:** the Census Bureau says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "There were 304 state-administered funds and 4,632 locally-administered defined benefit public pension systems, all of which are represented here.\n\n",
+              "url": "https://www.census.gov/aspp",
+              "title": "Annual Survey of Public Pensions (ASPP)"
+            }
+          ],
+          "type": "text",
+          "text": "there were 304 state-administered funds and 4,632 locally-administered defined benefit public pension systems"
+        },
+        {
+          "type": "text",
+          "text": ". In 2025, "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "### Highlights\n- In 2025, state and local governments invested $6.49 trillion in short- and long-term assets in pension plans, up 8.46% from $5.98 tri...",
+              "url": "https://www.census.gov/newsroom/press-releases/2026/2025-aspp.html",
+              "title": "Census Bureau Releases 2025 Annual Survey of Public Pensions"
+            }
+          ],
+          "type": "text",
+          "text": "state and local governments invested $6.49 trillion in short- and long-term assets in pension plans, up 8.46% from $5.98 trillion in 2024."
+        },
+        {
+          "type": "text",
+          "text": "\n- **US private pensions:** no count of corporate pension plans found.\n- **Canada membership:** StatCan's figure as of January 1, 2025 is 7,352,686 active registered pension plan members. The number of plans was not in the results.\n- **Canada concentration:**\n  - Mordor Intelligence says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "## Competitive Landscape\nCanada’s pension ecosystem is concentrated, with the Maple Eight controlling a significant share of the assets. ",
+              "url": "https://www.mordorintelligence.com/industry-reports/canada-pension-fund-market",
+              "title": "Canada Pension Fund Market Size, Share Analysis & Industry Growth Report - 2030"
+            }
+          ],
+          "type": "text",
+          "text": "Canada's pension ecosystem is concentrated, with the Maple Eight controlling a significant share of the assets."
+        },
+        {
+          "type": "text",
+          "text": "\n  - It ranks "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "CPPIB leads at CAD 714.4 billion, followed by CDPQ at CAD 473 billion and OTPP at CAD 247.5 billion. ",
+              "url": "https://www.mordorintelligence.com/industry-reports/canada-pension-fund-market",
+              "title": "Canada Pension Fund Market Size, Share Analysis & Industry Growth Report - 2030"
+            }
+          ],
+          "type": "text",
+          "text": "CPPIB leads at CAD 714.4 billion, followed by CDPQ at CAD 473 billion and OTPP at CAD 247.5 billion."
+        },
+        {
+          "type": "text",
+          "text": "\n  - Another source says CPP Investments has "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "It is the flagship example of the Canadian model, large in-house teams investing directly in PE, real assets, and credit globally, with over 50% of th...",
+              "url": "https://praxisrock.com/resources/investors/pension-funds",
+              "title": "76 Pension Funds"
+            }
+          ],
+          "type": "text",
+          "text": "large in-house teams investing directly in PE, real assets, and credit globally, with over 50% of the portfolio in private markets."
+        },
+        {
+          "type": "text",
+          "text": "\n- **Private-markets exposure:** a UMass PERI working paper says "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Pension funds alone currently account for $2.7 trillion in\n\ncommitted funds to private financial markets, the latter of which has ballooned to $26 tri...",
+              "url": "https://peri.umass.edu/wp-content/uploads/joomla/images/publication/WP600.pdf",
+              "title": "The Growth of Private Financial Markets"
+            }
+          ],
+          "type": "text",
+          "text": "pension funds alone currently account for $2.7 trillion in committed funds to private financial markets"
+        },
+        {
+          "type": "text",
+          "text": ".\n- **Spending on the problem:** this is Canoe's own estimate, so it is a vendor claim. Medium-sized firms, a group that includes pension funds, "
+        },
+        {
+          "citations": [
+            {
+              "type": "web_search_result_location",
+              "cited_text": "Here are some examples:\n\n- Small investment firms (UHNW Individuals, Single Family Offices, Breakaway RIAs, Endowments, Foundations) can ingest and pr...",
+              "url": "https://canoeintelligence.com/manual-data-entry-is-costing-investment-firms-up-to-4-million-a-year-why/",
+              "title": "Manual Data Entry is Costing Investment Firms Up to $4 Million a Year. Why? - Canoe"
+            }
+          ],
+          "type": "text",
+          "text": "can ingest and process between 11,000 to 56,000 documents each month, extract between 1,080,000 and 5,400,000 key data points, and spend between $315,000 to $900,000 annually managing this process."
+        },
+        {
+          "type": "text",
+          "text": "\n\n## Blockers\n\nNo sources found."
+        }
+      ],
+      "container": null,
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "stop_details": null,
+      "usage": {
+        "input_tokens": 222589,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 0
+        },
+        "output_tokens": 5841,
+        "output_tokens_details": {
+          "thinking_tokens": 1304
+        },
+        "service_tier": "standard",
+        "inference_geo": "global",
+        "server_tool_use": {
+          "web_search_requests": 10,
+          "web_fetch_requests": 0
+        }
+      },
+      "diagnostics": null
+    },
+    "retrieved_at": "2026-10-11T23:50:11.845Z"
+  }
+]

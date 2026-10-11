@@ -5,7 +5,7 @@ import { MODEL, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPr
 export const RESEARCH_PROMPT = "research.v1";
 
 /** Searches allowed per request, and requests allowed per stage (the first plus pause_turn continuations). */
-export const MAX_SEARCHES = 12;
+export const MAX_SEARCHES = 10;
 const MAX_REQUESTS = 4;
 const EXCERPT_MAX = 1200;
 
@@ -16,11 +16,7 @@ export interface Source {
   url: string;
   title: string;
   retrieved_at: string;
-  /**
-   * Text quoted from the page, taken from the API's citations. Empty when the
-   * page appeared in search results but the model never quoted it: search
-   * results themselves carry no readable page text.
-   */
+  /** Text quoted from the page, taken from the API's citations. Never empty. */
   excerpt: string;
 }
 
@@ -40,8 +36,9 @@ export function normalizeUrl(url: string): string {
 
 /**
  * Builds the SourceStore from the API's own blocks, never from URLs the model
- * writes in prose: every source is a URL that a web search actually returned
- * or a citation actually points at.
+ * writes in prose. Only pages the model quoted are kept, because search results
+ * carry no readable text: a page with no citation has nothing a claim could
+ * rest on. Ids are assigned after that filter, in order of first appearance.
  */
 export function buildSourceStore(responses: { message: Anthropic.Message; retrieved_at: string }[]): SourceStore {
   const byUrl = new Map<string, Source & { quotes: string[] }>();
@@ -49,7 +46,7 @@ export function buildSourceStore(responses: { message: Anthropic.Message; retrie
     const key = normalizeUrl(url);
     let s = byUrl.get(key);
     if (!s) {
-      s = { id: `S${byUrl.size + 1}`, url, title: title?.trim() || url, retrieved_at, excerpt: "", quotes: [] };
+      s = { id: "", url, title: title?.trim() || url, retrieved_at, excerpt: "", quotes: [] };
       byUrl.set(key, s);
     } else if (s.title === s.url && title?.trim()) {
       s.title = title.trim();
@@ -73,9 +70,9 @@ export function buildSourceStore(responses: { message: Anthropic.Message; retrie
     }
   }
 
-  return [...byUrl.values()].map(({ quotes, ...s }) => {
+  return [...byUrl.values()].filter((s) => s.quotes.length).map(({ quotes, ...s }, i) => {
     const excerpt = quotes.join(" … ");
-    return { ...s, excerpt: excerpt.length > EXCERPT_MAX ? `${excerpt.slice(0, EXCERPT_MAX - 1)}…` : excerpt };
+    return { ...s, id: `S${i + 1}`, excerpt: excerpt.length > EXCERPT_MAX ? `${excerpt.slice(0, EXCERPT_MAX - 1)}…` : excerpt };
   });
 }
 
@@ -121,7 +118,11 @@ export async function runResearch(spec: IdeaSpec): Promise<{
       max_tokens: 16000,
       output_config: { effort: "medium" },
       system,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: MAX_SEARCHES }],
+      // The basic variant on purpose. web_search_20260209 (dynamic filtering) runs
+      // searches from code execution, so results never come back as citable
+      // blocks and the response has no citations, which leaves the SourceStore
+      // with no excerpts (measured 2026-10-11: 0 excerpts across 292 sources).
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: MAX_SEARCHES }],
       messages,
     });
     responses.push({ message, retrieved_at: new Date().toISOString() });
