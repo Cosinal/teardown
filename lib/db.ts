@@ -29,6 +29,13 @@ export function init() {
       ref TEXT)`;
     // Existing tables predate the ref column.
     await q`ALTER TABLE signups ADD COLUMN IF NOT EXISTS ref TEXT`;
+    await q`CREATE TABLE IF NOT EXISTS teardowns (
+      id TEXT PRIMARY KEY,
+      idea TEXT NOT NULL,
+      report JSONB NOT NULL,
+      prompt_version TEXT NOT NULL,
+      cost_usd NUMERIC(10, 4),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
   })().catch((err) => {
     ready = undefined;
     throw err;

@@ -15,6 +15,8 @@ export default function Join() {
   }, []);
 
   useEffect(() => {
+    // refresh() only sets state after awaiting the fetch, never synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
     const t = setInterval(refresh, 4000);
     return () => clearInterval(t);

@@ -1,25 +1,19 @@
+import sample from "./fixtures/sample.json";
 import type { TeardownReport } from "./types";
+import { parseReport } from "./validate";
 
-export type { Competitor, Source, TeardownReport } from "./types";
+export type * from "./types";
+export { LIMITS, ReportError, parseReport } from "./validate";
+
+/** The design's sample report (Teardown's own idea), validated once at load. */
+export const SAMPLE_REPORT: TeardownReport = parseReport(sample);
 
 /**
  * Produce a market teardown for a business idea.
  *
- * STUB: returns a fixed, clearly-labelled placeholder report. Not implemented yet.
+ * STUB: returns the sample report regardless of the idea. Not implemented yet.
  */
 export async function runTeardown(idea: string): Promise<TeardownReport> {
-  return {
-    competitors: [
-      {
-        name: "Example Competitor (stub)",
-        url: "https://example.com",
-        pricing: "Not implemented",
-        target_customer: "Not implemented",
-      },
-    ],
-    pricing_summary: `Stub report for: ${idea}`,
-    customer_segments: [],
-    market_gaps: [],
-    sources: [],
-  };
+  void idea;
+  return SAMPLE_REPORT;
 }

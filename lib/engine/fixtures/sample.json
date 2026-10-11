@@ -1,0 +1,282 @@
+{
+  "date": "2026-10-11",
+  "sources_retrieved": "2026-10-09",
+  "verdict": {
+    "call": "test_first",
+    "confidence": "medium",
+    "summary": "A real gap sits between free chatbot answers and $50-plus human research, but nothing yet shows that buyers will pay to close it."
+  },
+  "idea": {
+    "name": "Single-payment business idea teardowns",
+    "headline": "Idea teardowns for a single $5 to $10 payment",
+    "customer": "First-time founders and side-project builders with an idea and no way to judge it.",
+    "problem": "Free advice is vague, and proper research costs more than an untested idea justifies.",
+    "revenue": "One payment of $5 to $10 per report. No subscription and no account."
+  },
+  "scorecard": {
+    "alternatives": {
+      "rating": "mixed",
+      "key_figure": { "value": "5", "unit": "alternatives" },
+      "finding": "Free chatbots below, $50-plus human research above.",
+      "basis": "found",
+      "source": 3
+    },
+    "demand_evidence": {
+      "rating": "mixed",
+      "key_figure": { "value": "40+", "unit": "threads/week" },
+      "finding": "Many ask for validation. Few visibly pay for it.",
+      "basis": "found",
+      "source": 5
+    },
+    "economics": {
+      "rating": "mixed",
+      "key_figure": { "value": "$5.95", "unit": "kept/sale" },
+      "finding": "85% margin, but under $6 a sale to fund growth.",
+      "basis": "estimated",
+      "source": 12
+    },
+    "distribution": {
+      "rating": "weak",
+      "key_figure": { "value": "$1.98", "unit": "CAC ceiling" },
+      "finding": "Price is too low to support paid acquisition.",
+      "basis": "estimated",
+      "source": 13
+    },
+    "blockers": {
+      "rating": "strong",
+      "key_figure": { "value": "0", "unit": "high-severity" },
+      "finding": "Nothing legal or technical prevents a launch.",
+      "basis": "estimated",
+      "source": 14
+    }
+  },
+  "page_summaries": {
+    "market": "Free answers sit below this price and expensive research sits above it. The slot in between is empty, which is either an opening or a warning.",
+    "business": "The margin is healthy and the profit is small. Under six dollars a sale has to pay for finding the customer.",
+    "next_steps": "Three things must be true for this to work. They are ranked by how much damage each one does if it turns out to be false."
+  },
+  "alternatives": [
+    {
+      "name": "General AI chatbot",
+      "examples": "ChatGPT, Claude, Gemini",
+      "what_it_does": "Answers “is this a good idea?” in seconds from one prompt.",
+      "price": { "text": "Free, or $20 a month", "basis": "found", "source": 1 },
+      "weakness": "Agrees with the person asking, cites nothing, and needs a skilled prompt to be useful."
+    },
+    {
+      "name": "AI idea-validator apps",
+      "examples": "Three reviewed",
+      "what_it_does": "A web form returns a scored validation report.",
+      "price": { "text": "$19 to $49 a month", "basis": "found", "source": 2 },
+      "weakness": { "text": "A subscription for a one-off need. Scores arrive without sources.", "basis": "found", "source": 7 }
+    },
+    {
+      "name": "Freelance research gig",
+      "examples": "Online marketplaces",
+      "what_it_does": "A freelancer writes a short market report to order.",
+      "price": { "text": "$50 to $300 a report", "basis": "found", "source": 3 },
+      "weakness": { "text": "Three to seven days to deliver, and quality varies by seller.", "basis": "found", "source": 3 }
+    },
+    {
+      "name": "Paid advisor call",
+      "examples": "Booking platforms",
+      "what_it_does": "An hour of questions with an experienced founder.",
+      "price": { "text": "$150 to $400 an hour", "basis": "found", "source": 4 },
+      "weakness": "Costs more than the idea is worth before any test has been run."
+    },
+    {
+      "name": "Doing it by hand",
+      "workaround": true,
+      "what_it_does": "Searching competitors, reviews and forums yourself.",
+      "price": { "text": "Free, plus 4 to 6 hours", "basis": "estimated", "source": 11 },
+      "weakness": { "text": "Most people stop after the first search and never reach pricing.", "basis": "estimated", "source": 11 }
+    }
+  ],
+  "market_gap": [
+    {
+      "text": "Nothing on this list is cheap, sourced and finished at once. Chatbots are free, but they agree with the person asking and show no evidence. Human research is sourced, but it starts at seven times the price and takes days.",
+      "basis": "found",
+      "source": 3
+    },
+    "The open position is a fixed-format report with cited evidence, bought once for less than a lunch. The gap is real. Whether it is a market is what the tests on page 4 are for."
+  ],
+  "demand_evidence": [
+    {
+      "signal": "Search interest",
+      "rating": "mixed",
+      "value": "6,600",
+      "detail": { "text": "US searches a month", "basis": "found", "source": 6 }
+    },
+    {
+      "signal": "Community complaints",
+      "rating": "strong",
+      "value": "40+",
+      "detail": { "text": "feedback threads a week", "basis": "found", "source": 5 }
+    },
+    {
+      "signal": "Competitor reviews",
+      "rating": "mixed",
+      "value": "3.9",
+      "detail": { "text": "of 5, across 212 reviews", "basis": "found", "source": 7 }
+    },
+    {
+      "signal": "Signs people already pay",
+      "rating": "weak",
+      "value": "1,000+",
+      "detail": { "text": "orders on one gig", "basis": "found", "source": 3 }
+    }
+  ],
+  "economics": {
+    "market_size": {
+      "inputs": [
+        {
+          "value": "150,000",
+          "label": "reachable customers",
+          "note": { "text": "Idea-stage members of five founder communities", "basis": "estimated", "source": 10 }
+        },
+        {
+          "value": "$7",
+          "label": "price",
+          "note": "Midpoint of the $5 to $10 range"
+        },
+        {
+          "value": "1.5",
+          "label": "purchases a year",
+          "note": { "text": "Most buy once, a few test several ideas", "basis": "estimated", "source": 10 }
+        }
+      ],
+      "result": {
+        "value": "$1.58M",
+        "label": "a year at most",
+        "note": { "text": "A ceiling. At 2% conversion it is about $31,500.", "basis": "estimated", "source": 10 }
+      }
+    },
+    "unit": {
+      "price": {
+        "value": "$7.00",
+        "label": "Price",
+        "note": "Midpoint of the range, paid once"
+      },
+      "cost_to_serve": {
+        "value": "$1.05",
+        "label": "Cost to serve",
+        "note": [
+          { "text": "$0.50 card fee", "basis": "found", "source": 8 },
+          { "text": "and $0.55 to run", "basis": "estimated", "source": 12 }
+        ]
+      },
+      "max_cac": {
+        "value": "$1.98",
+        "label": "Max affordable acquisition cost",
+        "note": { "text": "A third of the $5.95 left after costs", "basis": "estimated", "source": 12 }
+      },
+      "margin": {
+        "value": "85%",
+        "label": "Margin",
+        "note": { "text": "$5.95 kept on each report", "basis": "estimated", "source": 12 }
+      }
+    }
+  },
+  "distribution": [
+    {
+      "name": "Founder communities",
+      "examples": "Reddit, Indie Hackers, Discord groups",
+      "rating": "mixed",
+      "reason": { "text": "Free and on target, but self-promotion rules limit how often a link can be posted.", "basis": "found", "source": 9 }
+    },
+    {
+      "name": "Public sample teardowns",
+      "examples": "Free reports published as search content",
+      "rating": "mixed",
+      "reason": { "text": "Each sample can rank for its own idea, but search traffic takes three to six months to build.", "basis": "estimated", "source": 13 }
+    },
+    {
+      "name": "Paid search and social ads",
+      "examples": "Search, social and forum ad networks",
+      "rating": "weak",
+      "reason": { "text": "At $1 to $3 a click and 3% conversion, a customer costs 17 to 50 times the $1.98 ceiling.", "basis": "estimated", "source": 13 }
+    }
+  ],
+  "blockers": [
+    {
+      "type": "Legal",
+      "risk": "Reports read as professional advice",
+      "severity": "low",
+      "detail": { "text": "Clear terms and the disclaimer on page 4 are needed before launch.", "basis": "estimated", "source": 14 }
+    },
+    {
+      "type": "Technical",
+      "risk": "Invented sources",
+      "severity": "medium",
+      "detail": { "text": "Language models fabricate citations, so every FOUND link needs an automated check before delivery.", "basis": "estimated", "source": 14 }
+    },
+    {
+      "type": "Platform",
+      "risk": "Model provider pricing",
+      "severity": "low",
+      "detail": { "text": "A threefold rise in model and search costs would cut margin from 85% to 72%.", "basis": "estimated", "source": 12 }
+    }
+  ],
+  "riskiest_assumptions": [
+    {
+      "statement": "People will pay $5 to $10 for a sourced report when a chatbot gives a rough one for free.",
+      "short": "People will pay for this when a general AI chatbot gives a rough version for free.",
+      "if_false": "If false, there is no business. This is the riskiest assumption from page 1."
+    },
+    {
+      "statement": "Free channels alone can deliver the first 100 customers.",
+      "if_false": "If false, the product works but nobody finds it, because the price cannot fund paid acquisition."
+    },
+    {
+      "statement": "A report costs about $1 to produce with every source checked and no person involved.",
+      "if_false": "If false, margin falls and each report needs a human editor."
+    }
+  ],
+  "next_tests": [
+    {
+      "name": "Paid landing page.",
+      "description": "A one-page offer with a $7 checkout. Reports written by hand.",
+      "summary": "Put a one-page offer with a $7 checkout in front of 300 visitors from founder communities, and write the first reports by hand. It is the cheapest way to check the assumption above.",
+      "assumption": 1,
+      "proves": "People pay at all.",
+      "cost": "Under $50",
+      "time": "10 days",
+      "kill_threshold": "Fewer than 9 paid orders from 300 visitors, a rate under 3%.",
+      "kill_threshold_short": "Under 9 orders from 300 visits"
+    },
+    {
+      "name": "Five public teardowns.",
+      "description": "Free sample reports posted to three founder communities.",
+      "assumption": 2,
+      "proves": "Free channels bring visitors.",
+      "cost": "$0",
+      "time": "2 weeks",
+      "kill_threshold": "Fewer than 300 visits in total, or posts removed as promotion."
+    },
+    {
+      "name": "Automated batch.",
+      "description": "Thirty reports generated with link checks and no editing.",
+      "assumption": 3,
+      "proves": "Cost and accuracy hold.",
+      "cost": "About $35",
+      "time": "3 days",
+      "kill_threshold": "Cost above $1.50 a report, or more than 1 dead source in 20."
+    }
+  ],
+  "sources": [
+    { "basis": "found", "text": "OpenAI. ChatGPT pricing page. Free tier, and Plus at $20 a month." },
+    { "basis": "found", "text": "Pricing pages of three AI idea-validator apps. Plans from $19 to $49 a month." },
+    { "basis": "found", "text": "Freelance marketplace search for “business idea validation”. Top 20 gigs by orders." },
+    { "basis": "found", "text": "Advisor booking platform. Listed hourly rates across 40 startup advisor profiles." },
+    { "basis": "found", "text": "Thread counts on r/startups, r/SideProject and Indie Hackers, four weeks to October 4." },
+    { "basis": "found", "text": "Keyword tool export. US monthly volume for “validate business idea” and 11 variants." },
+    { "basis": "found", "text": "Review listings for the three apps in source 2. 212 reviews, average 3.9 of 5." },
+    { "basis": "found", "text": "Stripe. Standard US card pricing of 2.9% plus $0.30 a charge." },
+    { "basis": "found", "text": "Community rules pages for r/startups and r/Entrepreneur. Self-promotion sections." },
+    { "basis": "estimated", "text": "Estimate. 1.9M combined members of five founder communities × 8% at idea stage." },
+    { "basis": "estimated", "text": "Estimate. The same research timed by hand on three sample ideas." },
+    { "basis": "estimated", "text": "Estimate. Unit cost model on page 3. Card fee, model and search calls, hosting." },
+    { "basis": "estimated", "text": "Estimate. Category click prices of $1 to $3 and a 3% landing page conversion rate." },
+    { "basis": "estimated", "text": "Estimate. Our review of legal, technical and platform exposure. Not legal advice." }
+  ]
+}
