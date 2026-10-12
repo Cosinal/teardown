@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyFactcheck, collectClaims, factcheckRequest, runFactcheck, supportRate, type CheckResult } from "../lib/engine/factcheck";
+import { applyFactcheck, assembleGap, collectClaims, factcheckRequest, gapChanged, runFactcheck, supportRate, type CheckResult } from "../lib/engine/factcheck";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
 
@@ -111,9 +111,33 @@ describe("applyFactcheck", () => {
     expect(log.find((l) => l.id === "scorecard")).toMatchObject({ action: "estimated" });
   });
 
+  it("updates a scorecard that counted the rows when a row is dropped", () => {
+    const { section: out } = apply([result("alternatives[1].weakness[0]", "unsupported", "drop")]);
+    expect(out.scorecard.key_figure).toEqual({ value: "2", unit: "alternatives" });
+  });
+
   it("logs in section order", () => {
     const { log } = apply([result("alternatives[1].weakness[0]", "unsupported", "drop"), result("market_gap[1]", "unsupported", "drop")]);
     expect(log.map((l) => l.id)).toEqual(claims.map((c) => c.id));
+  });
+});
+
+describe("gap repair helpers", () => {
+  const remaining = [found("Platforms cost $150-500K a year.", "S2"), plain("Below that, there is room.")];
+
+  it("only repairs when a gap claim changed", () => {
+    expect(gapChanged([{ id: "market_gap[1]", text: "x", source: "S3", verdict: "unsupported", reason: "", action: "dropped" }])).toBe(true);
+    expect(gapChanged([{ id: "alternatives[0].price", text: "x", source: "S1", verdict: "unsupported", reason: "", action: "dropped" }])).toBe(false);
+  });
+
+  it("keeps parts by number and adds plain parts, but never plain text with figures", () => {
+    expect(assembleGap(remaining, { parts: [{ keep: 0, text: null }, { keep: null, text: "A cheaper tool could fit." }, { keep: null, text: "It costs $24K." }, { keep: 7, text: null }] }))
+      .toEqual([remaining[0], plain("A cheaper tool could fit.")]);
+    expect(assembleGap(remaining, { parts: [{ keep: null, text: "Up to 3 tools." }] })).toBeNull();
+  });
+
+  it("puts back a supported part the reply left out, in its original place", () => {
+    expect(assembleGap(remaining, { parts: [{ keep: 1, text: null }] }, [0])).toEqual(remaining);
   });
 });
 
@@ -133,13 +157,25 @@ describe("runFactcheck (Anthropic mocked)", () => {
     const ids = collectClaims(section).map((c) => c.id);
     parse
       .mockResolvedValueOnce(reply(ids.slice(1).map((id) => result(id, "supported"))))
-      .mockResolvedValueOnce(reply(ids.map((id) => (id === "market_gap[1]" ? result(id, "unsupported", "drop") : result(id, "supported")))));
+      .mockResolvedValueOnce(reply(ids.map((id) => (id === "alternatives[0].price" ? result(id, "partial", "rewrite", "Sales-led pricing") : result(id, "supported")))));
     const r = await runFactcheck(section, store);
     expect(parse).toHaveBeenCalledTimes(2);
-    expect(r.section.market_gap).toHaveLength(1);
-    expect(r.run).toMatchObject({ stage: "factcheck", prompt_version: "factcheck.v1", model: "claude-haiku-5-5" });
-    expect(r.run?.claims?.find((c) => c.id === "market_gap[1]")).toMatchObject({ verdict: "unsupported", action: "dropped" });
+    expect(r.section.alternatives[0].price).toEqual(found("Sales-led pricing", "S1"));
+    expect(r.run).toMatchObject({ stage: "factcheck", prompt_version: "factcheck.v2", model: "claude-haiku-5-5" });
+    expect(r.run?.claims?.find((c) => c.id === "alternatives[0].price")).toMatchObject({ verdict: "partial", action: "rewritten" });
+    expect(r.run).not.toHaveProperty("repairs");
     // 2 calls × (5000 in × $0.10 + 1000 out × $0.50) per million.
     expect(r.run?.cost_usd).toBe(0.002);
+  });
+
+  it("repairs the market gap when one of its claims is dropped", async () => {
+    const ids = collectClaims(section).map((c) => c.id);
+    parse
+      .mockResolvedValueOnce(reply(ids.map((id) => (id === "market_gap[0]" ? result(id, "unsupported", "drop") : result(id, "supported")))))
+      .mockResolvedValueOnce({ ...reply([]), parsed_output: { parts: [{ keep: 0, text: null }, { keep: null, text: "So a focused tool has room." }] } });
+    const r = await runFactcheck(section, store);
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(r.section.market_gap).toEqual([found("No reconciliation-only tool exists.", "S3"), plain("So a focused tool has room.")]);
+    expect(r.run).toMatchObject({ prompt_version: "factcheck.v2+factcheck-gap.v1", repairs: [{ field: "market_gap" }] });
   });
 });

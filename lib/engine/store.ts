@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { init, sql } from "@/lib/db";
-import { FACTCHECK_PROMPT } from "./factcheck";
+import { FACTCHECK_GAP_PROMPT, FACTCHECK_PROMPT } from "./factcheck";
 import type { IntakeInput } from "./input";
 import { INTAKE_PROMPT } from "./intake";
 import type { StageRun } from "./llm";
@@ -16,7 +16,7 @@ export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
 
 /** Stored in teardowns.prompt_version: every stage's prompt version in this pipeline. */
 export const PIPELINE_VERSION = [
-  INTAKE_PROMPT, RESEARCH_PROMPT, ALTERNATIVES_RESEARCH_PROMPT, WRITER_SHARED_PROMPT, ALTERNATIVES_WRITE_PROMPT, FACTCHECK_PROMPT,
+  INTAKE_PROMPT, RESEARCH_PROMPT, ALTERNATIVES_RESEARCH_PROMPT, WRITER_SHARED_PROMPT, ALTERNATIVES_WRITE_PROMPT, FACTCHECK_PROMPT, FACTCHECK_GAP_PROMPT,
 ].join("+");
 
 export function newTeardownId() {

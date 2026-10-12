@@ -13,7 +13,8 @@ import { PRICE_NOT_PUBLIC } from "./types";
 // partly supported ones may be narrowed. Every fix is re-validated against the
 // section rules and reverted if it breaks them.
 
-export const FACTCHECK_PROMPT = "factcheck.v1";
+export const FACTCHECK_PROMPT = "factcheck.v2";
+export const FACTCHECK_GAP_PROMPT = "factcheck-gap.v1";
 const CHECK_ATTEMPTS = 2;
 /** Used when an unsupported scorecard citation can't be dropped or rewritten. */
 const SCORECARD_METHOD = "Our summary of the alternatives listed in this section";
@@ -219,10 +220,60 @@ export function applyFactcheck(
       log.push({ ...entry, action: "rewritten", result: r.text ?? undefined });
     }
   }
+  // A scorecard that counted the rows must count the rows that are left.
+  const rows = current.alternatives.length;
+  if (rows < section.alternatives.length && current.scorecard.key_figure.value === String(section.alternatives.length)) {
+    current = { ...current, scorecard: { ...current.scorecard, key_figure: { ...current.scorecard.key_figure, value: String(rows) } } };
+  }
   // Report the log in section order.
   const index = new Map(claims.map((c, i) => [c.id, i]));
   log.sort((a, b) => index.get(a.id)! - index.get(b.id)!);
   return { section: current, log };
+}
+
+const GapSchema = z.object({ parts: z.array(z.object({ keep: z.number().int().nullable(), text: z.string().nullable() })) });
+export type GapReply = z.infer<typeof GapSchema>;
+
+/** Market-gap parts whose citation changed, which may leave the rest of the paragraph pointing at nothing. */
+export function gapChanged(log: ClaimCheck[]): boolean {
+  return log.some((l) => l.id.startsWith("market_gap") && (l.action === "dropped" || l.action === "rewritten" || l.action === "estimated"));
+}
+
+/**
+ * Builds the repaired gap from the repairer's reply. Kept parts are taken as
+ * they are; new parts are plain text and may not carry figures, so the repair
+ * can't add an unsourced fact. Parts in `protect` (cited claims the checker
+ * called supported) stay even if the reply leaves them out, in their original
+ * order. Returns null if nothing usable is left.
+ */
+export function assembleGap(remaining: Part[], reply: GapReply, protect: number[] = []): Part[] | null {
+  const out = reply.parts.flatMap((p): { part: Part; index?: number }[] => {
+    if (p.keep !== null) return remaining[p.keep] ? [{ part: remaining[p.keep], index: p.keep }] : [];
+    const text = p.text?.trim();
+    return text && !/\d/.test(text) ? [{ part: { text, source: null, estimate: null } }] : [];
+  });
+  for (const i of protect) {
+    if (!remaining[i] || out.some((o) => o.index === i)) continue;
+    const before = out.findIndex((o) => o.index !== undefined && o.index > i);
+    out.splice(before < 0 ? out.length : before, 0, { part: remaining[i], index: i });
+  }
+  return out.length ? out.map((o) => o.part) : null;
+}
+
+/** Remaining gap parts that are cited claims the checker called supported. */
+function supportedGapParts(remaining: Part[], log: ClaimCheck[]): number[] {
+  const ok = new Set(log.filter((l) => l.id.startsWith("market_gap") && l.verdict === "supported").map((l) => `${l.source}|${l.text}`));
+  return remaining.flatMap((p, i) => (p.source && ok.has(`${p.source}|${p.text}`) ? [i] : []));
+}
+
+export function gapRepairRequest(before: Part[], remaining: Part[], log: ClaimCheck[]): string {
+  const cite = (p: Part) => (p.source ? `cites ${p.source}` : p.estimate ? `estimate: ${p.estimate}` : "plain");
+  return JSON.stringify({
+    before: before.map((p) => ({ text: p.text, cited: cite(p) })),
+    remaining: remaining.map((p, i) => ({ number: i, text: p.text, cited: cite(p) })),
+    changes: log.filter((l) => l.id.startsWith("market_gap") && l.action !== "kept")
+      .map((l) => ({ claim: l.text, action: l.action, ...(l.result && { now: l.result }), why: l.reason })),
+  }, null, 2);
 }
 
 /** Share of checked claims the checker called supported. */
@@ -276,14 +327,58 @@ export async function checkClaims(
   }
 }
 
-/** Checks every cited claim and applies the fixes. The run's `claims` logs each verdict and action. */
+/**
+ * Checks every cited claim and applies the fixes. When the market gap's cited
+ * parts changed, one more call makes the rest of the paragraph consistent with
+ * them. The run's `claims` logs each verdict and action, and `repairs` the gap
+ * before and after.
+ */
 export async function runFactcheck(section: AlternativesSection, store: SourceStore, options: { model?: string } = {}): Promise<{
   section: AlternativesSection;
   log: ClaimCheck[];
   results: CheckResult[];
   run: StageRun | null;
 }> {
-  const { claims, results, run } = await checkClaims(section, store, options);
+  const model = options.model ?? STAGE_MODELS.factcheck;
+  const { claims, results, run } = await checkClaims(section, store, { model });
   const applied = applyFactcheck(section, claims, results, store);
-  return { section: applied.section, log: applied.log, results, run: run && { ...run, claims: applied.log } };
+  if (!run) return { ...applied, results, run };
+
+  let out = applied.section;
+  let usage = run.usage;
+  const repairs: NonNullable<StageRun["repairs"]> = [];
+  if (gapChanged(applied.log)) {
+    const msg = await anthropic().messages.parse({
+      model,
+      max_tokens: 4000,
+      output_config: { effort: "medium", format: zodOutputFormat(GapSchema) },
+      system: loadPrompt(FACTCHECK_GAP_PROMPT),
+      messages: [{ role: "user", content: gapRepairRequest(section.market_gap, out.market_gap, applied.log) }],
+    });
+    usage = addUsage(usage, msg.usage);
+    assertFinished(msg, "factcheck");
+    const gap = msg.parsed_output && assembleGap(out.market_gap, msg.parsed_output, supportedGapParts(out.market_gap, applied.log));
+    const candidate = gap && { ...out, market_gap: gap };
+    try {
+      if (candidate) {
+        out = parseAlternatives(structuredClone(candidate), store);
+        repairs.push({ field: "market_gap", before: section.market_gap.map((p) => p.text).join(" "), after: out.market_gap.map((p) => p.text).join(" ") });
+      }
+    } catch {
+      // Keep the fact-checked gap as it is if the repair breaks the section rules.
+    }
+  }
+  return {
+    section: out,
+    log: applied.log,
+    results,
+    run: {
+      ...run,
+      prompt_version: repairs.length ? `${FACTCHECK_PROMPT}+${FACTCHECK_GAP_PROMPT}` : run.prompt_version,
+      usage,
+      cost_usd: costUsd(model, usage),
+      claims: applied.log,
+      ...(repairs.length && { repairs }),
+    },
+  };
 }

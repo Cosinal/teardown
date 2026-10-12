@@ -62,6 +62,10 @@ export interface StageRun {
   duration_ms: number;
   /** Fact-check only: the verdict and action for each cited claim. */
   claims?: ClaimCheck[];
+  /** Fact-check only: fields rewritten for consistency after claims changed. */
+  repairs?: { field: string; before: string; after: string }[];
+  /** Writers only: why each retry was needed. */
+  retries?: string[];
 }
 
 /** One cited claim as fact-checked. */

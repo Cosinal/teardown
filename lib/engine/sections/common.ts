@@ -169,6 +169,7 @@ export async function runWriter<T>(
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: WRITE_INSTRUCTION }];
   let usage = ZERO_USAGE;
   let modelId = model;
+  const retries: string[] = [];
   for (let attempt = 1; ; attempt++) {
     const msg = await anthropic().messages.create(writerParams({ model, context, sectionPrompt }, messages));
     usage = addUsage(usage, msg.usage);
@@ -182,11 +183,13 @@ export async function runWriter<T>(
         run: {
           stage, step: "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
           cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+          ...(retries.length && { retries }),
         },
       };
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err);
       if (attempt >= WRITE_ATTEMPTS) throw new Error(`${stage}: writer output invalid: ${problem}`);
+      retries.push(problem.slice(0, 500));
       messages.push(
         { role: "assistant", content: text || "(empty reply)" },
         { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it, and reply with the whole JSON object again.` },

@@ -139,3 +139,24 @@ Rows after fact-check:
 **Idea c competitors: 1/5 in the section (Canoe), 1/5 in sources.** The draft had five rows, including broader platforms (Clearwater Analytics) and portfolio monitoring (Chronograph LP, "$120K–$650K a year"). Fact-check dropped both rows. Their quotes didn't support the claims: the Chronograph citation's quote stops at the header of a pricing table, and the Clearwater quote is a page header. The rule kept two real competitors with "Not public" pricing (Canoe/Alkymi/Tamarix and Principal) instead of dropping them.
 
 **Limit found:** a web-search citation quotes about 150 characters, so every excerpt the checker sees is short (no excerpt in this run came near the 1,200-character cap). A true claim whose evidence sits outside the quoted 150 characters is judged unsupported and dropped. That is the right bar for a sourced readout, but it costs coverage for enterprise vendors whose figures sit in tables. Possible fix: fetch the cited page (web fetch) for the claims the checker cannot confirm.
+
+## Fact-check v2 re-applied to the 21-52-32 drafts (`factcheck.v2` + `factcheck-gap.v1`)
+
+Same drafts as the run above, re-checked with `npx tsx scripts/factcheck-saved.ts tests/runs/2026-10-12T21-52-32-911Z --apply` (no new research or writing). Changes from v1:
+- When rows are dropped, a scorecard that counted rows is corrected. c's was still "5 alternatives" with 3 rows left.
+- When a market-gap claim changes, one Haiku call repairs the rest of the paragraph. It can only keep parts or add plain text without figures, and it can't remove a cited part that was supported. c's gap had kept "$24,000 a year, below that" after "that" was dropped.
+- `factcheck.v2` tells the checker to rewrite rather than drop when the quote is about the same product.
+
+| Idea | Supported before | After | Fixes | Rows left | Fact-check cost |
+|---|---|---|---|---|---|
+| a-teardown | 5/10 (50%) | 6/9 (67%) | 4 rewritten, 1 dropped (the workaround row) | 3 | $0.0024 |
+| b-dog-grooming | 5/9 (56%) | 6/9 (67%) | 3 rewritten | 5 | $0.0019 |
+| c-nav-reconciliation | 2/6 (33%) | 1/3 (33%) | 1 rewritten, 3 dropped (2 rows) | 3 | $0.0012 |
+
+- **c after v2:** statement extraction tools (Canoe, Alkymi, Tamarix), Not public; custodian-run service (Principal), Not public; spreadsheets and analysts. The scorecard now says 3 alternatives. The gap no longer refers to the dropped figure. **Key competitors: 1/5 (Canoe).**
+- **Clearwater still dropped.** The v2 rule did not change the checker's choice: the row's only cited weakness was unsupported, so the row went.
+- **Variance.** The checker is not deterministic. On identical drafts, "before" moved between runs: a 40% → 50%, b 56% → 44% → 56%, c 50% → 17% → 33%. Read the rates as ±15 points.
+- **"After"** is the same Haiku checker grading the fixed section, so it is not an independent measure. Its remaining partials are mostly framing ("the text states the figure but not that it is a weakness") and quotes cut off at about 150 characters.
+- **a's workaround row was dropped.** Its price "Free to $20 a month" was really ChatGPT's plan prices, which the checker rightly called unsupported for doing it by hand. With no priced fallback, the row went, so the section lost its do-it-yourself row this time.
+- **Not checked:** estimates are never fact-checked. c's workaround price "Analyst time, no price found" is the kind of non-estimate `writer-shared.v1` forbids, and it got through.
+- **Writers retried in all three ideas.** The reason was not logged then; `StageRun.retries` now records it. The projection counts every writer as retrying once, so it errs high.
