@@ -39,6 +39,8 @@ Each configuration ran only once or twice, so treat these counts as indicative.
 
 ## 2026-10-12T18-00-11 — Existing Alternatives section (`alternatives-research.v1` + `alternatives-write.v1`, Sonnet, max 6 searches)
 
+Superseded by `alternatives-write.v2` (next section), which fixes the citation issues listed at the end of this one.
+
 Intake (Opus, `intake.v2`) → research (Sonnet, `research.v2`, max 6 searches) → alternatives (Sonnet: own searches + one writer call). Database on. Each writer call passed validation first time (no retry). Sources is the merged store (shared research plus the section's new pages).
 
 | Idea | Research searches | Alt searches | Sources | Intake | Research | Alternatives | Total | Alt time |
@@ -64,3 +66,31 @@ Issues seen:
 - Other sections still come from the sample, so each report's sources page also lists the sample's sources (e.g. "Freelance marketplace search…" on the dog-grooming report).
 
 One run per idea; treat these as indicative.
+
+### Spot check: idea c's found claims against their source excerpts (v1)
+
+Of 12 found claims, about half are supported by the cited excerpt: Canoe quote-only pricing, Canoe's volume-based licence with an onboarding fee, and GPs following no standard template. "$50K to $500K a year" is partly supported (the excerpt shows Allvue at $150–500K). "3–6 month setup" comes from Limina's page about Limina but is cited as a weakness of Solovis, Allvue and Chronograph. The rest are unsupported absence claims ("no public price", "Canoe and Alkymi publish no price", where the TrustRadius page covers Canoe only), plus "aimed at fund managers" cited to a BNY page that doesn't say so.
+
+## 2026-10-12T18-04-33 — Existing Alternatives with `alternatives-write.v2` (research prompt unchanged), database off
+
+v2 rules: an estimate must be a calculation or inference that produces the figure; absence claims are plain text, never cited; "Quote only" only when the cited page says pricing is by quote, otherwise use a priced row; no first person. Each writer call passed validation first time.
+
+| Idea | Research searches | Alt searches | Sources | Intake | Research | Alternatives | Total | Alt time |
+|---|---|---|---|---|---|---|---|---|
+| a-teardown | 5 | 6 | 45 | $0.020 | $0.203 | $0.277 | **$0.501** | 41s |
+| b-dog-grooming | 6 | 5 | 34 | $0.024 | $0.247 | $0.253 | **$0.523** | 36s |
+| c-nav-reconciliation | 6 | 6 | 51 | $0.025 | $0.228 | $0.370 | **$0.623** | 59s |
+
+Rows written:
+
+- **a**: AI idea-report tools (WorthBuild, DimeADozen); free AI validators (ValidatorAI); Fiverr freelancers; ChatGPT and free prompts; do it by hand. Gap: "not clearly different from WorthBuild at $5".
+- **b** (4 rows): Halifax mobile groomers (priced from a Canadian mobile-grooming range, with "no Halifax mobile prices found" as plain text); salons and pet chains; self-serve dog wash; groom at home.
+- **c** (4 rows): LP monitoring platforms (Chronograph, Cobalt LP); document extraction (Canoe); AI and Excel tools (Copilot, extraction add-ins); do it by hand.
+
+Idea c key competitors: **1/5 in the section (Canoe), 1/5 in sources or notes (Canoe)**. Three product clusters plus the workaround, but no reconciliation or fund-ops cluster this time. Section research did search outsourced administration and custodians ("State Street Northern Trust private markets data aggregation…"). The writer dropped that row, most likely under v2's rule to replace a row it cannot price. Across the two runs, idea c showed more than one cluster both times, and the reconciliation cluster once.
+
+Still seen in v2:
+
+- a: "ChatGPT … Free or $20 a month" is cited to a WorthBuild comparison table that doesn't mention ChatGPT pricing.
+- c: the workaround's "$315K to $900K a year" is cited to a page about small firms' processing costs. Plausible but loosely supported.
+- Citation accuracy still depends on the writer. Nothing checks that a cited excerpt states the claim (that is the fact-check stage, out of scope here).

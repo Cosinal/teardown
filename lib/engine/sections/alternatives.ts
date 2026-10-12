@@ -14,7 +14,7 @@ import {
 // `scorecard.alternatives`. The pattern for the other sections.
 
 export const ALTERNATIVES_RESEARCH_PROMPT = "alternatives-research.v1";
-export const ALTERNATIVES_WRITE_PROMPT = "alternatives-write.v1";
+export const ALTERNATIVES_WRITE_PROMPT = "alternatives-write.v2";
 
 /** Default web searches for the section's research. Override with the maxSearches option. */
 export const ALTERNATIVES_MAX_SEARCHES = 6;

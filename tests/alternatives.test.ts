@@ -157,7 +157,7 @@ describe("runAlternatives (Anthropic mocked)", () => {
     expect(request.messages[0].content).toContain("[S30]");
     expect(request.system).toContain(`at most ${liveSourceBudget()} distinct`);
 
-    expect(r.run).toMatchObject({ stage: "alternatives", prompt_version: "alternatives-research.v1+alternatives-write.v1" });
+    expect(r.run).toMatchObject({ stage: "alternatives", prompt_version: "alternatives-research.v1+alternatives-write.v2" });
     // The research fixture's usage (Opus-sized, 10 searches) plus two writer calls, priced at Sonnet rates.
     expect(r.run.usage.web_search_requests).toBe(10);
     expect(r.run.usage.input_tokens).toBe(206014 + 2000);
