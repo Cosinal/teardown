@@ -160,3 +160,33 @@ Same drafts as the run above, re-checked with `npx tsx scripts/factcheck-saved.t
 - **a's workaround row was dropped.** Its price "Free to $20 a month" was really ChatGPT's plan prices, which the checker rightly called unsupported for doing it by hand. With no priced fallback, the row went, so the section lost its do-it-yourself row this time.
 - **Not checked:** estimates are never fact-checked. c's workaround price "Analyst time, no price found" is the kind of non-estimate `writer-shared.v1` forbids, and it got through.
 - **Writers retried in all three ideas.** The reason was not logged then; `StageRun.retries` now records it. The projection counts every writer as retrying once, so it errs high.
+
+## 2026-10-12T22-35-41 — fact-check against fetched pages (`factcheck.v3`), database on
+
+Fact-check now judges each claim in its own Haiku call (thinking off), first against the search excerpt. Any claim the excerpt doesn't fully support is re-judged against the cited page, fetched server-side (`lib/engine/fetch.ts`, readable text, ~6k tokens per claim taken from up to 100k characters of page, cached by URL in `sources.page_text`). The page check runs twice unless the first answer is "unsupported", and the stricter verdict stands. Support found on the page only counts with a passage that appears on the page word for word; that passage is added to the source's excerpt. A page check never drops a claim the excerpt partly supported; a page rewrite still applies.
+
+Temperature 0 isn't possible: Haiku 5.5 returns a 400 for any `temperature` ("deprecated for this model"), as do the other Claude 5 models. One call per claim, thinking off, two page runs with the stricter verdict kept, and the verbatim-quote requirement stand in for it.
+
+Full pipeline run (rows `VKeQLDk7dRjA`, `pNh954ST07FB`, `Cm3-9fEVdnY5`). After two late fixes (quote matching that ignores table punctuation, and the no-drop floor), fact-check was re-applied to the same drafts with `factcheck-saved.ts --apply`; the support and row figures below are from that re-apply, the costs from the pipeline run.
+
+| Idea | Total | Projected, 9 sections | Fact-check (of which re-checks) | Excerpt → with pages → after | Rows kept | Pages ok / failed |
+|---|---|---|---|---|---|---|
+| a-teardown | $0.486 | $1.00 | $0.0104 ($0.0075) | 2/10 → 5/10 → 8/8 (100%) | 3 of 4 | 3 / 3 |
+| b-dog-grooming | $0.516 | $0.98 | $0.0090 ($0.0063) | 3/9 → 3/9 → 9/9 (100%) | 4 of 4 | 4 / 1 |
+| c-nav-reconciliation | $0.535 | $1.24 | $0.0102 ($0.0077) | 4/9 → 5/9 → 7/9 (78%) | 5 of 5 | 2 / 1 |
+
+Same code re-applied to the 21-52-32 drafts (the ones fact-check v1/v2 cut down):
+
+| Idea | Excerpt → with pages → after | Rows kept | Fact-check (re-checks) |
+|---|---|---|---|
+| a-teardown | 3/10 → 4/10 → 9/10 (90%) | 4 of 4 | $0.0123 ($0.0094) |
+| b-dog-grooming | 6/9 → 6/9 → 9/9 (100%) | 5 of 5 | $0.0056 ($0.0029) |
+| c-nav-reconciliation | 1/6 → 4/6 → 6/6 (100%) | 5 of 5 | $0.0101 ($0.0082) |
+
+- **Idea c, Chronograph and Clearwater.** On the 21-52-32 draft both rows come back: Clearwater's "Illiquid fund accounting still maturing" is on its cited page word for word, and Chronograph's "$120K-$650K" is in the cited page's vendor table (the excerpt had stopped at the table header). In the fresh 22-35-41 run, Chronograph is in the section ($120K to $650K a year, page-checked) and Clearwater wasn't cited. In a 22-32-15 run, neither was cited and 4 of 5 rows were kept.
+- **Targets.** "After" (a fresh check of the fixed section, same pages) is 90–100% on a and b. The page stage itself is lower (a 40–50%, b 33–67%): what's left is mostly honest "partial" (a range assembled from two vendors' prices, a qualifier the page doesn't state) and pages behind bot walls. "After" leaves out dropped claims and grades against excerpts that now include the checker's verified quotes, so read it next to rows kept.
+- **Fetching.** 14 of 20 cited pages fetched on the 21-52-32 drafts. Failures are bot walls (Fiverr, Capterra, Yelp, Trustpilot, Pet Valu, StartupSavant: 403), one 429 and one timeout. Without a page, a partial verdict is asked once more on the excerpt and the stricter stands.
+- **Stability.** Three checks of each draft: excerpt verdicts changed for 1 of 25 claims (21-52-32) and 0 of 28 (22-35-41); final verdicts for 1 of 25 and 2 of 28, all between supported and partial. Support rates moved at most 10 points between runs, against ±15–33 points for the single batched call before.
+- **Cost.** Fact-check is $0.006–0.016 per section, up from ~$0.002; the page re-checks are $0.003–0.012 of it. At 9 sections that adds about $0.05–0.10 a report. Projections stay at $0.98–1.24, under $1.50.
+- **a's "Do it by hand" row** went on the fresh draft: its price was ChatGPT's plans and its weakness ("takes 2-3 days") isn't on the cited page.
+- **Writer failures.** In a first full run (22-30-24), a and c failed in the writer on length limits (`alternatives[1].name` over 26 characters, `what_it_does` over 64) after its retry. Unrelated to fact-check; a and c were re-run.

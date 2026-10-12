@@ -62,6 +62,10 @@ export interface StageRun {
   duration_ms: number;
   /** Fact-check only: the verdict and action for each cited claim. */
   claims?: ClaimCheck[];
+  /** Fact-check only: each page fetched to re-check a claim, once per URL. */
+  pages?: { source: string; url: string; ok: boolean; cached: boolean; chars?: number; error?: string }[];
+  /** Fact-check only: what the re-checks after the excerpt pass cost (included in cost_usd). */
+  recheck_cost_usd?: number;
   /** Fact-check only: fields rewritten for consistency after claims changed. */
   repairs?: { field: string; before: string; after: string }[];
   /** Writers only: why each retry was needed. */
@@ -80,6 +84,14 @@ export interface ClaimCheck {
   action: "kept" | "rewritten" | "estimated" | "dropped" | "unresolved";
   /** The claim after the action, when it changed. */
   result?: string;
+  /** What the verdict rests on: the search excerpt, or the fetched page. */
+  basis?: "excerpt" | "page";
+  /** The verdict against the excerpt alone, when the page changed it. */
+  excerpt_verdict?: "supported" | "partial" | "unsupported";
+  /** The passage on the page that supports the claim or its rewrite. */
+  quote?: string;
+  /** Why the page couldn't be used, when it was needed. */
+  fetch_error?: string;
 }
 
 export const ZERO_USAGE: TokenUsage = {
@@ -95,6 +107,18 @@ export function addUsage(total: TokenUsage, u: Anthropic.Usage): TokenUsage {
     cache_creation_1h_input_tokens: (total.cache_creation_1h_input_tokens ?? 0) + (u.cache_creation?.ephemeral_1h_input_tokens ?? 0),
     cache_read_input_tokens: total.cache_read_input_tokens + (u.cache_read_input_tokens ?? 0),
     web_search_requests: total.web_search_requests + (u.server_tool_use?.web_search_requests ?? 0),
+  };
+}
+
+/** Adds two usage totals, e.g. the totals of two calls. */
+export function sumUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    input_tokens: a.input_tokens + b.input_tokens,
+    output_tokens: a.output_tokens + b.output_tokens,
+    cache_creation_input_tokens: a.cache_creation_input_tokens + b.cache_creation_input_tokens,
+    cache_creation_1h_input_tokens: (a.cache_creation_1h_input_tokens ?? 0) + (b.cache_creation_1h_input_tokens ?? 0),
+    cache_read_input_tokens: a.cache_read_input_tokens + b.cache_read_input_tokens,
+    web_search_requests: a.web_search_requests + b.web_search_requests,
   };
 }
 

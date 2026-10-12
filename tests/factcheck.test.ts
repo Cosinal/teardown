@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyFactcheck, assembleGap, collectClaims, factcheckRequest, gapChanged, runFactcheck, supportRate, type CheckResult } from "../lib/engine/factcheck";
+import { addQuotes, applyFactcheck, assembleGap, claimRequest, collectClaims, gapChanged, requireQuote, runFactcheck, stricter, supportRate, type CheckResult } from "../lib/engine/factcheck";
+import { memoryPageCache, type PageResult } from "../lib/engine/fetch";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
 
@@ -47,9 +48,12 @@ describe("collectClaims", () => {
     expect(collectClaims(s).map((c) => c.id)).not.toContain("alternatives[0].price");
   });
 
-  it("puts each claim's quoted text in the request", () => {
-    const req = JSON.parse(factcheckRequest(collectClaims(section).slice(0, 1), store));
-    expect(req[0]).toMatchObject({ id: "alternatives[0].price", claim: "Quote only", source: { id: "S1", quoted_text: "Canoe pricing is sales-led." } });
+  it("puts one claim's quoted text in its request, and the page text when given", () => {
+    const c = collectClaims(section)[0];
+    expect(JSON.parse(claimRequest(c, store[0]))).toEqual({
+      context: c.context, claim: "Quote only", source: { id: "S1", title: "Page S1", url: "https://s1.example", quoted_text: "Canoe pricing is sales-led." },
+    });
+    expect(JSON.parse(claimRequest(c, store[0], "Full page")).source.page_text).toBe("Full page");
   });
 });
 
@@ -105,6 +109,12 @@ describe("applyFactcheck", () => {
     expect(log.find((l) => l.id === "market_gap[1]")).toMatchObject({ action: "dropped" });
   });
 
+  it("keeps a claim the excerpt partly supported when the page's rewrite doesn't fit", () => {
+    const { section: out, log } = apply([{ ...result("alternatives[1].price", "unsupported", "rewrite", "x".repeat(80)), basis: "page", excerpt_verdict: "partial" }]);
+    expect(out).toEqual(section);
+    expect(log.find((l) => l.id === "alternatives[1].price")).toMatchObject({ action: "kept", basis: "page", excerpt_verdict: "partial" });
+  });
+
   it("never drops the scorecard; it falls back to our own summary", () => {
     const { section: out, log } = apply([result("scorecard", "unsupported", "drop")]);
     expect(out.scorecard).toMatchObject({ source: null, estimate: "Our summary of the alternatives listed in this section" });
@@ -148,34 +158,150 @@ describe("supportRate", () => {
   });
 });
 
+describe("verdict helpers", () => {
+  const judged = (verdict: CheckResult["verdict"], action: CheckResult["action"], quote: string | null, text: string | null = null) =>
+    ({ verdict, reason: "r", action, text, method: null, quote });
+  const page = "Allvue Systems | $150K-$1.2M | ILPA templates\nPricing starts around $150K annually.";
+
+  it("keeps the stricter verdict, and the first on a tie", () => {
+    expect(stricter(judged("supported", "keep", "a"), judged("partial", "keep", "b")).quote).toBe("b");
+    expect(stricter(judged("unsupported", "drop", "a"), judged("partial", "keep", "b")).quote).toBe("a");
+    expect(stricter(judged("partial", "keep", "a"), judged("partial", "keep", "b")).quote).toBe("a");
+  });
+
+  it("accepts a quote that is on the page, ignoring case, spacing and dash style", () => {
+    expect(requireQuote(judged("supported", "keep", "allvue systems |  $150K–$1.2M"), page)).toMatchObject({ verdict: "supported" });
+  });
+
+  it("downgrades support without a verbatim quote, and withdraws an unquoted rewrite", () => {
+    expect(requireQuote(judged("supported", "keep", "Allvue costs $150K to $1.2M a year"), page)).toMatchObject({ verdict: "partial", action: "keep", quote: null });
+    expect(requireQuote(judged("supported", "keep", null), page)).toMatchObject({ verdict: "partial" });
+    expect(requireQuote(judged("unsupported", "rewrite", null, "From $150K a year"), page)).toMatchObject({ action: "drop", text: null });
+    expect(requireQuote(judged("partial", "rewrite", "invented passage here", "From $150K a year"), page)).toMatchObject({ action: "keep", text: null });
+    expect(requireQuote(judged("unsupported", "rewrite", "Pricing starts around $150K annually.", "From $150K a year"), page))
+      .toMatchObject({ action: "rewrite", text: "From $150K a year" });
+  });
+
+  it("adds page quotes to their source's excerpt once, and skips ones already there", () => {
+    const claims = collectClaims(section);
+    const results: CheckResult[] = claims.map((c) => ({ ...result(c.id, "supported"), basis: "excerpt" }));
+    results[2] = { ...results[2], basis: "page", quote: "Allvue starts at $150K." };
+    results[3] = { ...results[3], basis: "page", quote: "Allvue starts at $150K." };
+    results[4] = { ...results[4], basis: "page", quote: "analysts re-key statements." };
+    const { store: next, changed } = addQuotes(store, results, claims);
+    expect(changed.map((s) => s.id)).toEqual(["S2"]);
+    expect(next[1].excerpt).toBe("Allvue costs $150-500K a year. … Allvue starts at $150K.");
+    expect(next[0]).toBe(store[0]);
+  });
+});
+
 describe("runFactcheck (Anthropic mocked)", () => {
   const usage = { input_tokens: 5000, output_tokens: 1000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
-  const reply = (results: CheckResult[]) => ({ model: "claude-haiku-5-5", stop_reason: "end_turn", usage, parsed_output: { results }, content: [] });
-  beforeEach(() => parse.mockReset());
+  type Verdict = { verdict: CheckResult["verdict"]; action?: CheckResult["action"]; text?: string | null; quote?: string | null };
+  const reply = (parsed: unknown) => ({ model: "claude-haiku-5-5", stop_reason: "end_turn", usage, parsed_output: parsed, content: [] });
+  /** Answers each per-claim call from `judge`, and gap repairs from `gap`. */
+  const respond = (judge: (claim: string, page: string | undefined) => Verdict, gap?: unknown) =>
+    parse.mockImplementation(async (params: { messages: { content: string }[] }) => {
+      const req = JSON.parse(params.messages[0].content);
+      if (!("claim" in req)) return reply(gap);
+      const v = judge(req.claim, req.source.page_text);
+      return reply({ reason: `${v.verdict} because`, action: "keep", text: null, method: null, quote: null, ...v });
+    });
+  const pageText = "Allvue Systems pricing. Allvue costs $150K to $500K a year for most sponsors. Setup takes about three months.";
+  let fetcher: ReturnType<typeof vi.fn<(url: string) => Promise<PageResult>>>;
+  beforeEach(() => {
+    parse.mockReset();
+    fetcher = vi.fn(async () => ({ ok: true as const, text: pageText }));
+  });
 
-  it("retries when a claim gets no verdict, then applies the fixes and logs them on the run", async () => {
-    const ids = collectClaims(section).map((c) => c.id);
-    parse
-      .mockResolvedValueOnce(reply(ids.slice(1).map((id) => result(id, "supported"))))
-      .mockResolvedValueOnce(reply(ids.map((id) => (id === "alternatives[0].price" ? result(id, "partial", "rewrite", "Sales-led pricing") : result(id, "supported")))));
-    const r = await runFactcheck(section, store);
-    expect(parse).toHaveBeenCalledTimes(2);
-    expect(r.section.alternatives[0].price).toEqual(found("Sales-led pricing", "S1"));
-    expect(r.run).toMatchObject({ stage: "factcheck", prompt_version: "factcheck.v2", model: "claude-haiku-5-5" });
-    expect(r.run?.claims?.find((c) => c.id === "alternatives[0].price")).toMatchObject({ verdict: "partial", action: "rewritten" });
-    expect(r.run).not.toHaveProperty("repairs");
-    // 2 calls × (5000 in × $0.10 + 1000 out × $0.50) per million.
-    expect(r.run?.cost_usd).toBe(0.002);
+  it("judges each claim in its own call and fetches nothing when the excerpts support every claim", async () => {
+    respond(() => ({ verdict: "supported" }));
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(parse).toHaveBeenCalledTimes(collectClaims(section).length);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(r.run).toMatchObject({ stage: "factcheck", prompt_version: "factcheck.v3", model: "claude-haiku-5-5", pages: [], recheck_cost_usd: 0 });
+    // 8 calls × (5000 in × $0.10 + 1000 out × $0.50) per million.
+    expect(r.run?.cost_usd).toBe(0.008);
+    expect(r.section).toEqual(section);
+  });
+
+  it("re-checks a claim the excerpt doesn't support against the fetched page, twice, and keeps it with the page's quote", async () => {
+    respond((claim, page) => {
+      if (claim !== "Three-month setup") return { verdict: "supported" };
+      return page ? { verdict: "supported", quote: "Setup takes about three months." } : { verdict: "unsupported", action: "drop" };
+    });
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(parse).toHaveBeenCalledTimes(collectClaims(section).length + 2);
+    expect(r.section).toEqual(section);
+    expect(r.log.find((l) => l.id === "alternatives[1].weakness[0]")).toMatchObject({
+      verdict: "supported", excerpt_verdict: "unsupported", basis: "page", quote: "Setup takes about three months.", action: "kept",
+    });
+    expect(r.changed).toEqual([{ ...store[1], excerpt: "Allvue costs $150-500K a year. … Setup takes about three months." }]);
+    expect(r.run?.pages).toEqual([{ source: "S2", url: "https://s2.example", ok: true, cached: false, chars: pageText.length }]);
+    expect(r.run?.recheck_cost_usd).toBe(0.002);
+  });
+
+  it("keeps the stricter of the two page verdicts, and treats an unquoted \"supported\" as partial", async () => {
+    let calls = 0;
+    respond((claim, page) => {
+      if (claim !== "Three-month setup") return { verdict: "supported" };
+      if (!page) return { verdict: "partial" };
+      return ++calls === 1 ? { verdict: "supported", quote: "Setup takes about three months." } : { verdict: "supported", quote: "Setup is fast." };
+    });
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(r.log.find((l) => l.id === "alternatives[1].weakness[0]")).toMatchObject({ verdict: "partial", basis: "page", action: "kept" });
+    expect(r.changed).toEqual([]);
+  });
+
+  it("never drops a claim on the page that the excerpt partly supported, but applies a page rewrite", async () => {
+    respond((claim, page) => {
+      if (claim === "Three-month setup") return page ? { verdict: "unsupported", action: "drop" } : { verdict: "partial" };
+      if (claim === "Quote only") return page ? { verdict: "unsupported", action: "rewrite", text: "Sales-led pricing", quote: "Allvue Systems pricing." } : { verdict: "partial" };
+      return { verdict: "supported" };
+    });
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(r.log.find((l) => l.id === "alternatives[1].weakness[0]")).toMatchObject({ verdict: "partial", basis: "excerpt", action: "kept" });
+    expect(r.log.find((l) => l.id === "alternatives[1].weakness[0]")?.reason).toContain("Page check: unsupported");
+    expect(r.log.find((l) => l.id === "alternatives[0].price")).toMatchObject({ verdict: "unsupported", basis: "page", action: "rewritten", result: "Sales-led pricing" });
+  });
+
+  it("fetches each page once per cache, across claims and runs", async () => {
+    respond((_claim, page) => (page ? { verdict: "unsupported", action: "drop" } : { verdict: "partial" }));
+    const pages = memoryPageCache();
+    await runFactcheck(section, store, { fetcher, pages });
+    await runFactcheck(section, store, { fetcher, pages });
+    expect(fetcher.mock.calls.map((c) => c[0]).sort()).toEqual(["https://s1.example", "https://s2.example", "https://s3.example"]);
+  });
+
+  it("without a page, asks a partial claim once more on the excerpt and keeps the stricter verdict", async () => {
+    fetcher.mockResolvedValue({ ok: false, error: "HTTP 403" });
+    let calls = 0;
+    respond((claim) => (claim !== "Three-month setup" ? { verdict: "supported" } : ++calls === 1 ? { verdict: "partial" } : { verdict: "unsupported", action: "drop" }));
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(r.log.find((l) => l.id === "alternatives[1].weakness[0]")).toMatchObject({ verdict: "unsupported", basis: "excerpt", fetch_error: "HTTP 403" });
+    expect(r.run?.pages).toEqual([{ source: "S2", url: "https://s2.example", ok: false, cached: false, error: "HTTP 403" }]);
+  });
+
+  it("checks on excerpts only when fetch is off", async () => {
+    respond(() => ({ verdict: "partial" }));
+    const r = await runFactcheck(section, store, { fetcher, fetch: false });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(r.results.every((x) => x.basis === "excerpt")).toBe(true);
+  });
+
+  it("retries a claim whose reply doesn't parse", async () => {
+    respond(() => ({ verdict: "supported" }));
+    parse.mockResolvedValueOnce(reply(null));
+    const r = await runFactcheck(section, store, { fetcher });
+    expect(parse).toHaveBeenCalledTimes(collectClaims(section).length + 1);
+    expect(r.results).toHaveLength(collectClaims(section).length);
   });
 
   it("repairs the market gap when one of its claims is dropped", async () => {
-    const ids = collectClaims(section).map((c) => c.id);
-    parse
-      .mockResolvedValueOnce(reply(ids.map((id) => (id === "market_gap[0]" ? result(id, "unsupported", "drop") : result(id, "supported")))))
-      .mockResolvedValueOnce({ ...reply([]), parsed_output: { parts: [{ keep: 0, text: null }, { keep: null, text: "So a focused tool has room." }] } });
-    const r = await runFactcheck(section, store);
-    expect(parse).toHaveBeenCalledTimes(2);
+    respond((claim) => (claim === "Platforms cost $150-500K a year." ? { verdict: "unsupported", action: "drop" } : { verdict: "supported" }), { parts: [{ keep: 0, text: null }, { keep: null, text: "So a focused tool has room." }] });
+    const r = await runFactcheck(section, store, { fetcher });
     expect(r.section.market_gap).toEqual([found("No reconciliation-only tool exists.", "S3"), plain("So a focused tool has room.")]);
-    expect(r.run).toMatchObject({ prompt_version: "factcheck.v2+factcheck-gap.v1", repairs: [{ field: "market_gap" }] });
+    expect(r.run).toMatchObject({ prompt_version: "factcheck.v3+factcheck-gap.v1", repairs: [{ field: "market_gap" }] });
   });
 });

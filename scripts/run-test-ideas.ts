@@ -4,7 +4,8 @@
 // tests/runs/<timestamp>/. Billable: each idea costs real API money.
 //
 // Test-only extras, costed separately from the pipeline: a second fact-check
-// pass on the checked section (the "after" support rate; --no-verify skips it),
+// pass on the checked section, with the same page cache (the "after" support
+// rate; --no-verify skips it),
 // and a max_tokens: 0 request that reuses the writers' cached context with a
 // different section prompt, to measure what each further writer pays for it.
 //
@@ -19,13 +20,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkClaims, supportRate } from "../lib/engine/factcheck";
+import { memoryPageCache, type PageCache } from "../lib/engine/fetch";
 import type { IntakeInput } from "../lib/engine/input";
 import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, costUsd, type StageRun, type TokenUsage } from "../lib/engine/llm";
 import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
 import { buildReport } from "../lib/engine/report";
 import { SECTIONS, SECTION_NAMES } from "../lib/engine/sections/config";
 import { WRITE_INSTRUCTION, writerContext, writerParams } from "../lib/engine/sections/common";
-import { createTeardown, runStages } from "../lib/engine/store";
+import { createTeardown, dbPageCache, runStages } from "../lib/engine/store";
 
 try {
   process.loadEnvFile(".env.local");
@@ -86,12 +88,14 @@ const verify = !process.argv.includes("--no-verify");
 const ideas = only ? IDEAS.filter((i) => i.slug === only) : IDEAS;
 const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
 
-async function run(input: IntakeInput): Promise<StagesResult & { id: string | null }> {
+/** Runs one idea. Its page cache is returned so the verify pass reuses the fetched pages. */
+async function run(input: IntakeInput): Promise<StagesResult & { id: string | null; pages: PageCache }> {
   if (useDb) {
     const id = await createTeardown(input);
-    return { id, ...(await runStages(id, options)) };
+    return { id, pages: dbPageCache(id), ...(await runStages(id, options)) };
   }
-  return { id: null, ...(await runPipeline(input, options)) };
+  const pages = memoryPageCache();
+  return { id: null, pages, ...(await runPipeline(input, { ...options, factcheck: { ...options.factcheck, pages } })) };
 }
 
 /** Which of the idea's key competitors appear in the section's text, and in any source or note. */
@@ -144,7 +148,7 @@ async function main() {
     write("report.json", buildReport(r.alternatives.section, r.sources));
 
     const probe = await probeSharedContext(r);
-    const after = verify ? await checkClaims(r.alternatives.section, r.sources, options.factcheck) : null;
+    const after = verify ? await checkClaims(r.alternatives.section, r.sources, { ...options.factcheck, pages: r.pages }) : null;
     if (after) write("factcheck-verify.json", after.results);
     console.log(`✓ ${idea.slug}: ${r.sources.length} sources, $${r.runs.reduce((n, x) => n + x.cost_usd, 0).toFixed(4)}`);
     return { ...r, probe, after };
@@ -159,7 +163,9 @@ async function main() {
     const altResearch = find("alternatives", "research");
     const altWrite = find("alternatives", "write")!;
     const factcheck = find("factcheck");
-    const before = supportRate(r.factcheck.results);
+    const before = supportRate(r.factcheck.excerptResults);
+    const withPages = supportRate(r.factcheck.results);
+    const pages = factcheck?.pages ?? [];
     const afterRate = r.after ? supportRate(r.after.results) : null;
     const actions = (a: string) => r.factcheck.log.filter((l) => l.action === a).length;
     const key = keyCompetitors(idea, r);
@@ -181,15 +187,19 @@ async function main() {
       alt_research_usd: usd(altResearch),
       alt_write_usd: usd(altWrite),
       factcheck_usd: usd(factcheck),
+      factcheck_recheck_usd: factcheck?.recheck_cost_usd ?? 0,
       total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
       projected_9_sections_usd: projection.total,
       claims_checked: before.checked,
       support_before: `${before.supported}/${before.checked} (${pct(before.rate)})`,
       partial_before: before.partial,
       unsupported_before: before.unsupported,
+      support_with_pages: `${withPages.supported}/${withPages.checked} (${pct(withPages.rate)})`,
+      pages_fetched: `${pages.filter((p) => p.ok).length} ok, ${pages.filter((p) => !p.ok).length} failed`,
       fixes: `rewritten ${actions("rewritten")}, estimated ${actions("estimated")}, dropped ${actions("dropped")}, unresolved ${actions("unresolved")}`,
       support_after: afterRate ? `${afterRate.supported}/${afterRate.checked} (${pct(afterRate.rate)})` : "–",
       verify_usd: usd(r.after?.run),
+      rows: `${r.alternatives.section.alternatives.length} of ${r.alternatives.draft.alternatives.length}`,
       alternatives: r.alternatives.section.alternatives.map((a) => (a.examples ? `${a.name} (${a.examples})` : a.name)).join("; "),
       key_in_section: key.in_section,
       key_in_sources: key.in_sources,

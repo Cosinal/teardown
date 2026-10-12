@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { init, sql } from "@/lib/db";
 import { FACTCHECK_GAP_PROMPT, FACTCHECK_PROMPT } from "./factcheck";
+import type { PageCache } from "./fetch";
 import type { IntakeInput } from "./input";
 import { INTAKE_PROMPT } from "./intake";
 import type { StageRun } from "./llm";
@@ -62,6 +63,28 @@ export async function getSources(id: string): Promise<SourceStore> {
 }
 
 /**
+ * Fact-check's page cache in the sources table. A page fetched for any
+ * teardown in the last 30 days is reused, since prices change. A failed fetch
+ * is reused only within the same teardown: a bot wall may not be there later.
+ */
+export function dbPageCache(teardownId: string): PageCache {
+  return {
+    async get(url) {
+      const rows = await sql()`SELECT page_text, page_error FROM sources
+        WHERE url = ${url} AND page_fetched_at IS NOT NULL
+          AND ((page_text IS NOT NULL AND page_fetched_at > now() - interval '30 days') OR teardown_id = ${teardownId})
+        ORDER BY (page_text IS NOT NULL) DESC, page_fetched_at DESC LIMIT 1`;
+      if (!rows.length) return undefined;
+      return rows[0].page_text !== null ? { ok: true, text: rows[0].page_text } : { ok: false, error: rows[0].page_error ?? "fetch failed" };
+    },
+    async set(url, page) {
+      await sql()`UPDATE sources SET page_text = ${page.ok ? page.text : null}, page_error = ${page.ok ? null : page.error}, page_fetched_at = now()
+        WHERE teardown_id = ${teardownId} AND url = ${url}`;
+    },
+  };
+}
+
+/**
  * Runs the pipeline for a queued teardown and records each step: statuses,
  * stage runs (fact-check's include the per-claim log), sources and sections. Billable: callers must gate this behind payment (see CLAUDE.md).
  */
@@ -73,7 +96,8 @@ export async function runStages(id: string, options: StageOptions = {}): Promise
   const input = rows[0].input as IntakeInput;
 
   try {
-    return await runPipeline(input, options, {
+    const opts = { ...options, factcheck: { ...options.factcheck, pages: options.factcheck?.pages ?? dbPageCache(id) } };
+    return await runPipeline(input, opts, {
       status: (status) => setStatus(id, status),
       run: (run) => recordRun(id, run),
       intake: async (spec) => {

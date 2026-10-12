@@ -1,4 +1,4 @@
-import { runFactcheck, type CheckResult } from "./factcheck";
+import { runFactcheck, type CheckOptions, type CheckResult } from "./factcheck";
 import type { IntakeInput } from "./input";
 import { runIntake, type IdeaSpec } from "./intake";
 import type { ClaimCheck, StageRun } from "./llm";
@@ -17,12 +17,12 @@ export interface StageOptions {
   intake?: { model?: string };
   research?: ResearchOptions;
   alternatives?: AlternativesOptions;
-  factcheck?: { model?: string };
+  factcheck?: CheckOptions;
 }
 
 export interface StagesResult {
   spec: IdeaSpec;
-  /** The shared research's sources plus the sections' own. */
+  /** The shared research's sources plus the sections' own, with fact-check's page quotes added to excerpts. */
   sources: SourceStore;
   /** The shared research's notes. */
   notes: string;
@@ -36,7 +36,7 @@ export interface StagesResult {
     added: SourceStore;
     responses: SearchResponse[];
   };
-  factcheck: { log: ClaimCheck[]; results: CheckResult[] };
+  factcheck: { log: ClaimCheck[]; results: CheckResult[]; excerptResults: CheckResult[] };
   /** The cached prefix every section writer shares. */
   writerContext: string;
   runs: StageRun[];
@@ -96,18 +96,19 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
 
   await hooks.status?.("factcheck");
   const checked = await runFactcheck(altWrite.value, sources, options.factcheck);
+  if (checked.changed.length) await hooks.sources?.(checked.changed);
   await record(checked.run);
   await hooks.section?.("alternatives", { draft: altWrite.value, section: checked.section, notes: altResearch.notes });
 
   await hooks.status?.("drafted");
   return {
     spec: intake.spec,
-    sources,
+    sources: checked.sources,
     notes: research.notes,
     alternatives: {
       draft: altWrite.value, section: checked.section, notes: altResearch.notes, added: altResearch.changed, responses: altResearch.responses,
     },
-    factcheck: { log: checked.log, results: checked.results },
+    factcheck: { log: checked.log, results: checked.results, excerptResults: checked.excerptResults },
     writerContext: context,
     runs,
     responses: research.responses,
