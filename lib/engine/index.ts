@@ -1,19 +1,18 @@
-import sample from "./fixtures/sample.json";
+import type { IntakeInput } from "./input";
+import { runPipeline, type StageOptions } from "./pipeline";
+import { buildReport } from "./report";
 import type { TeardownReport } from "./types";
-import { parseReport } from "./validate";
 
 export type * from "./types";
 export { LIMITS, ReportError, parseReport } from "./validate";
-
-/** The design's sample report (Teardown's own idea), validated once at load. */
-export const SAMPLE_REPORT: TeardownReport = parseReport(sample);
+export { SAMPLE_REPORT } from "./report";
 
 /**
- * Produce a market teardown for a business idea.
- *
- * STUB: returns the sample report regardless of the idea. Not implemented yet.
+ * Produce a market teardown for a business idea: intake, research and the
+ * Existing Alternatives section (fact-checked) are live; every other section
+ * still comes from SAMPLE_REPORT. Billable: callers must gate this behind payment (see CLAUDE.md).
  */
-export async function runTeardown(idea: string): Promise<TeardownReport> {
-  void idea;
-  return SAMPLE_REPORT;
+export async function runTeardown(input: IntakeInput, options: StageOptions = {}): Promise<TeardownReport> {
+  const r = await runPipeline(input, options);
+  return buildReport(r.alternatives.section, r.sources);
 }
