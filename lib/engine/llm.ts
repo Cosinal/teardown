@@ -10,12 +10,13 @@ export const MODELS = {
 export type Stage = "intake" | "research";
 
 /**
- * Default model per stage. Intake and research are extraction and search work,
- * so they run on Sonnet; Opus stays available for the report-writing stages.
+ * Default model per stage. Intake runs on Opus: it costs 1-3 cents, and on
+ * Sonnet its queries stopped naming known competitors, which research then
+ * missed (tests/runs-summary.md). Research is search work and runs on Sonnet.
  * Each stage function also takes a `model` option to override this.
  */
 export const STAGE_MODELS: Record<Stage, string> = {
-  intake: MODELS.sonnet,
+  intake: MODELS.opus,
   research: MODELS.sonnet,
 };
 

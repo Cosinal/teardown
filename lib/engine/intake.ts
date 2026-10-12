@@ -4,7 +4,7 @@ import type { IntakeInput } from "./input";
 import { BILLING } from "./input";
 import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
 
-export const INTAKE_PROMPT = "intake.v1";
+export const INTAKE_PROMPT = "intake.v2";
 
 export const QUERY_PURPOSES = ["competitors", "pricing", "customers", "demand", "regulation"] as const;
 export const GEO_SCOPES = ["local", "regional", "national", "multi_country", "online"] as const;
