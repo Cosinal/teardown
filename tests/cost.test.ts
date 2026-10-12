@@ -24,6 +24,12 @@ describe("costUsd", () => {
     expect(costUsd("claude-sonnet-5-5", old as typeof ZERO_USAGE)).toBe(2.5);
   });
 
+  it("prices Haiku 5.5, used for fact-check", () => {
+    // 1M input ($0.10) + 1M output ($0.50) + 1M cache read ($0.01)
+    const u = { ...ZERO_USAGE, input_tokens: 1_000_000, output_tokens: 1_000_000, cache_read_input_tokens: 1_000_000 };
+    expect(costUsd("claude-haiku-5-5", u)).toBe(0.61);
+  });
+
   it("throws for a model without a price", () => {
     expect(() => costUsd("claude-unknown", ZERO_USAGE)).toThrow(/No price/);
   });

@@ -172,7 +172,7 @@ async function main() {
       sources: r.sources.length,
       alt_research_cache_write: altResearch?.usage.cache_creation_input_tokens ?? 0,
       alt_research_cache_read: altResearch?.usage.cache_read_input_tokens ?? 0,
-      alt_research_batched: batchedSearches(r.alternatives.responses),
+      alt_search_rounds: searchRounds(r.alternatives.responses),
       writer_context_tokens: altWrite.usage.cache_creation_input_tokens + altWrite.usage.cache_read_input_tokens,
       probe_cache_read: r.probe.cache_read_input_tokens,
       probe_cache_write: r.probe.cache_creation_input_tokens,
@@ -205,11 +205,14 @@ async function main() {
 const round = (n: number) => Math.round(n * 1e4) / 1e4;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/** True when no text falls between the section's first and last search: issued as one batch rather than one after another. */
-function batchedSearches(responses: StagesResult["responses"]): boolean {
-  const blocks = responses.flatMap((x) => x.message.content.map((b) => b.type));
-  const first = blocks.indexOf("server_tool_use");
-  return first >= 0 && !blocks.slice(first, blocks.lastIndexOf("server_tool_use")).includes("text");
+/**
+ * How many rounds of searches the model ran: searches issued together before
+ * any result came back count as one round. Each round after the first re-reads
+ * the whole context so far from cache, which is what drives cache reads up.
+ */
+function searchRounds(responses: StagesResult["responses"]): number {
+  const types = responses.flatMap((x) => x.message.content.map((b) => b.type));
+  return types.filter((t, i) => t === "server_tool_use" && types[i - 1] !== "server_tool_use").length;
 }
 
 /**
