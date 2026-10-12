@@ -36,3 +36,31 @@ Opus intake writes a query that names a known competitor ("Canoe Intelligence al
 `intake.v2` (Opus, plus a rule to name the best-known competitor) named Canoe in both runs, and research searched it both times. Research then spent its remaining searches on pricing, customers, demand and the LP data-extraction cluster. Of the other names in sources, the 00-15-11 run found Accelex, Alkymi and Arch, and the 00-15-13 run found Accelex, Alkymi, Chronograph, Burgiss, Allvue, Cobalt and Arch. Limina, Arcesium and FundGuard (reconciliation / fund-ops platforms) dropped out. With 6 searches, the research stage covers one competitor cluster, not both.
 
 Each configuration ran only once or twice, so treat these counts as indicative.
+
+## 2026-10-12T18-00-11 — Existing Alternatives section (`alternatives-research.v1` + `alternatives-write.v1`, Sonnet, max 6 searches)
+
+Intake (Opus, `intake.v2`) → research (Sonnet, `research.v2`, max 6 searches) → alternatives (Sonnet: own searches + one writer call). Database on. Each writer call passed validation first time (no retry). Sources is the merged store (shared research plus the section's new pages).
+
+| Idea | Research searches | Alt searches | Sources | Intake | Research | Alternatives | Total | Alt time |
+|---|---|---|---|---|---|---|---|---|
+| a-teardown | 5 | 6 | 45 | $0.020 | $0.204 | $0.332 | **$0.556** | 55s |
+| b-dog-grooming | 6 | 5 | 42 | $0.024 | $0.243 | $0.331 | **$0.598** | 55s |
+| c-nav-reconciliation | 6 | 5 | 53 | $0.026 | $0.228 | $0.324 | **$0.577** | 55s |
+
+Alternatives stage cost, per idea: about 52k cache-write tokens and 4–5k output in section research, 5–6 searches ($0.05–0.06), then a writer call with about 35k uncached input (sources with excerpts plus both sets of notes) and about 3k output.
+
+Rows written (workaround last in every case):
+
+- **a**: AI idea validators (WorthBuild, DimeADozen); chat-style AI advisors (ValidatorAI, IdeaProof); Fiverr freelancers; business planning software (LivePlan); do it by hand. Gap: WorthBuild already sells a $5 full report.
+- **b**: Halifax mobile groomers (Suds Up Pup, All 4 Paws); Halifax salons (Jollytails, Naughty Paw); chain salons and daycares (PetSmart, Camp Bow Wow); self-serve dog wash (Pet Valu); groom the dog yourself.
+- **c**: four competitor clusters plus the workaround: alts data platforms (Canoe, Alkymi, Accelex); LP portfolio platforms (Solovis, Allvue, Chronograph); generic reconciliation (Xceptor, Duco, Smartstream); outsourced administration (custodians, SS&C, Linedata); do it by hand.
+
+Idea c key competitors (Canoe, FundRecs, Limina, Arcesium, FundGuard): **1/5 named in the section (Canoe)**, 2/5 anywhere in sources or notes (Canoe, Limina). The section now covers more than one cluster, including a reconciliation one, but it reached reconciliation through generic capital-markets vendors (Xceptor, Duco), not the fund-ops platforms named in the brief. Limina's page is cited (for setup time) without Limina being named. Arcesium and FundGuard did not appear.
+
+Issues seen:
+
+- b: the mobile-groomer price "No public price found" is tagged *estimated* with the method "Searched Halifax mobile groomer sites…", and the scorecard cites the same estimate. That is a search note, not an estimate. The writer prompt should require a found citation for "no public price", or drop the price.
+- c: "No public price found" for Xceptor/Duco is cited *found* to Xceptor's own page, which only shows the absence of a price.
+- Other sections still come from the sample, so each report's sources page also lists the sample's sources (e.g. "Freelance marketplace search…" on the dog-grooming report).
+
+One run per idea; treat these as indicative.
