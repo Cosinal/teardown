@@ -57,6 +57,12 @@ export function init() {
       retrieved_at TIMESTAMPTZ NOT NULL,
       excerpt TEXT NOT NULL,
       PRIMARY KEY (teardown_id, source_id))`;
+    // Fact-check's page cache: the cited page's text (or why it couldn't be
+    // fetched), so each URL is fetched once (lib/engine/fetch.ts).
+    await q`ALTER TABLE sources ADD COLUMN IF NOT EXISTS page_text TEXT`;
+    await q`ALTER TABLE sources ADD COLUMN IF NOT EXISTS page_error TEXT`;
+    await q`ALTER TABLE sources ADD COLUMN IF NOT EXISTS page_fetched_at TIMESTAMPTZ`;
+    await q`CREATE INDEX IF NOT EXISTS sources_url_idx ON sources (url)`;
   })().catch((err) => {
     ready = undefined;
     throw err;
