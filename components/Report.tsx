@@ -215,7 +215,7 @@ function MarketPage({ r }: { r: TeardownReport }) {
                   {a.workaround ? <div className="td-cell-kind">Manual workaround</div> : <div className="td-cell-sub">{a.examples}</div>}
                 </th>
                 <td>{a.what_it_does}</td>
-                <td><Cited claim={a.price} /></td>
+                <td><Text value={a.price} /></td>
                 <td><Text value={a.weakness} /></td>
               </tr>
             ))}

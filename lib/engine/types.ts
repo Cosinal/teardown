@@ -63,6 +63,9 @@ export interface Scorecard {
   blockers: ScoreEntry;
 }
 
+/** Price shown for a real competitor that publishes no pricing. Uncited: absence can't be sourced. */
+export const PRICE_NOT_PUBLIC = "Not public";
+
 export interface Alternative {
   name: string;
   /** Who offers it, e.g. "ChatGPT, Claude, Gemini". Ignored when `workaround` is true. */
@@ -70,7 +73,7 @@ export interface Alternative {
   /** A manual workaround rather than a product. */
   workaround?: boolean;
   what_it_does: string;
-  price: Claim;
+  price: Claim | typeof PRICE_NOT_PUBLIC;
   weakness: Rich;
 }
 

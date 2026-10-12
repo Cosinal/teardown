@@ -1,7 +1,7 @@
 import sample from "./fixtures/sample.json";
 import type { SourceStore, Source as StoreSource } from "./research";
 import type { AlternativesSection, Part } from "./sections/alternatives";
-import type { Alternative, Claim, Rich, ScoreEntry, Source, TeardownReport } from "./types";
+import { PRICE_NOT_PUBLIC, type Alternative, type Claim, type Rich, type ScoreEntry, type Source, type TeardownReport } from "./types";
 import { LIMITS, ReportError, parseReport } from "./validate";
 
 // Turns section output, which cites SourceStore ids ("S12") or estimate
@@ -13,6 +13,11 @@ import { LIMITS, ReportError, parseReport } from "./validate";
 export const SAMPLE_REPORT: TeardownReport = parseReport(sample);
 
 const SOURCE_TEXT_MAX = 100;
+
+/** True for an uncited "Not public" price, in any case. */
+export function isNotPublic(p: Part): boolean {
+  return !p.source && !p.estimate && p.text.trim().toLowerCase() === PRICE_NOT_PUBLIC.toLowerCase();
+}
 
 /** A found source's line on the sources page: the page title, cut to fit. */
 export function sourceText(s: StoreSource): string {
@@ -100,7 +105,7 @@ export function buildReport(
       name: a.name,
       ...(a.workaround ? { workaround: true } : { examples: a.examples ?? "" }),
       what_it_does: a.what_it_does,
-      price: claim(a.price, `${p}.price`),
+      price: isNotPublic(a.price) ? PRICE_NOT_PUBLIC : claim(a.price, `${p}.price`),
       weakness: rich(a.weakness, `${p}.weakness`),
     };
   });

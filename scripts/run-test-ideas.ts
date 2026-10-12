@@ -1,7 +1,12 @@
-// Runs intake, research and the Existing Alternatives section on the three test
-// ideas, builds the partial report (live alternatives, the rest from the
-// sample), and writes everything to tests/runs/<timestamp>/. Billable: each
-// idea costs real API money.
+// Runs the pipeline (intake, research, the Existing Alternatives section,
+// fact-check) on the three test ideas, builds the partial report (live
+// alternatives, the rest from the sample), and writes everything to
+// tests/runs/<timestamp>/. Billable: each idea costs real API money.
+//
+// Test-only extras, costed separately from the pipeline: a second fact-check
+// pass on the checked section (the "after" support rate; --no-verify skips it),
+// and a max_tokens: 0 request that reuses the writers' cached context with a
+// different section prompt, to measure what each further writer pays for it.
 //
 //   npm run test:ideas            # also stores teardowns + sources in Neon when DATABASE_URL is set
 //   npm run test:ideas -- --no-db # API only
@@ -13,9 +18,13 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { checkClaims, supportRate } from "../lib/engine/factcheck";
 import type { IntakeInput } from "../lib/engine/input";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, costUsd, type StageRun, type TokenUsage } from "../lib/engine/llm";
 import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
 import { buildReport } from "../lib/engine/report";
+import { SECTIONS, SECTION_NAMES } from "../lib/engine/sections/config";
+import { WRITE_INSTRUCTION, writerContext, writerParams } from "../lib/engine/sections/common";
 import { createTeardown, runStages } from "../lib/engine/store";
 
 try {
@@ -71,7 +80,9 @@ const options: StageOptions = {
     model: flag("--alternatives-model"),
     maxSearches: flag("--alternatives-searches") ? Number(flag("--alternatives-searches")) : undefined,
   },
+  factcheck: { model: flag("--factcheck-model") },
 };
+const verify = !process.argv.includes("--no-verify");
 const ideas = only ? IDEAS.filter((i) => i.slug === only) : IDEAS;
 const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
 
@@ -123,45 +134,62 @@ async function main() {
     write("notes.md", `${r.notes}\n`);
     write("runs.json", r.runs);
     write("research-raw.json", `${JSON.stringify(r.responses, stripEncrypted, 2)}\n`);
+    write("alternatives-draft.json", r.alternatives.draft);
     write("alternatives.json", r.alternatives.section);
     write("alternatives-notes.md", `${r.alternatives.notes}\n`);
     write("alternatives-raw.json", `${JSON.stringify(r.alternatives.responses, stripEncrypted, 2)}\n`);
+    write("factcheck.json", r.factcheck.log);
+    write("writer-context.md", r.writerContext);
     // Live alternatives, scorecard.alternatives and market_gap; every other section from the sample.
     write("report.json", buildReport(r.alternatives.section, r.sources));
+
+    const probe = await probeSharedContext(r);
+    const after = verify ? await checkClaims(r.alternatives.section, r.sources, options.factcheck) : null;
+    if (after) write("factcheck-verify.json", after.results);
     console.log(`✓ ${idea.slug}: ${r.sources.length} sources, $${r.runs.reduce((n, x) => n + x.cost_usd, 0).toFixed(4)}`);
-    return r;
+    return { ...r, probe, after };
   }));
 
   const summary = ideas.map((idea, i) => {
     const res = results[i];
     if (res.status === "rejected") return { slug: idea.slug, error: String(res.reason) };
     const r = res.value;
-    const cost = (stage: string) => r.runs.find((x) => x.stage === stage)?.cost_usd ?? 0;
-    const run = (stage: string) => r.runs.find((x) => x.stage === stage);
-    const research = run("research");
-    const searches = (stage: string) => run(stage)?.usage.web_search_requests ?? 0;
+    const find = (stage: string, step?: string) => r.runs.find((x) => x.stage === stage && x.step === step);
+    const usd = (run: StageRun | undefined | null) => run?.cost_usd ?? 0;
+    const altResearch = find("alternatives", "research");
+    const altWrite = find("alternatives", "write")!;
+    const factcheck = find("factcheck");
+    const before = supportRate(r.factcheck.results);
+    const afterRate = r.after ? supportRate(r.after.results) : null;
+    const actions = (a: string) => r.factcheck.log.filter((l) => l.action === a).length;
     const key = keyCompetitors(idea, r);
+    const projection = projectReport(r, { altResearch, altWrite, factcheck, probe: r.probe });
     return {
       slug: idea.slug,
       teardown_id: r.id,
-      models: r.runs.map((x) => `${x.stage}=${x.model}`).join(" "),
-      queries: r.spec.search_queries.length,
-      ambiguities: r.spec.ambiguities.length,
-      web_searches: searches("research"),
-      alt_searches: searches("alternatives"),
+      research_searches: find("research")?.usage.web_search_requests ?? 0,
+      alt_searches: altResearch?.usage.web_search_requests ?? 0,
       sources: r.sources.length,
-      search_results: new Set(r.responses.flatMap(({ message }) => message.content.flatMap((b) =>
-        b.type === "web_search_tool_result" && Array.isArray(b.content) ? b.content.map((x) => x.url) : []))).size,
-      research_input_tokens: research?.usage.input_tokens ?? 0,
-      research_cache_write_tokens: research?.usage.cache_creation_input_tokens ?? 0,
-      research_cache_read_tokens: research?.usage.cache_read_input_tokens ?? 0,
-      research_output_tokens: research?.usage.output_tokens ?? 0,
-      intake_usd: cost("intake"),
-      research_usd: cost("research"),
-      alternatives_usd: cost("alternatives"),
-      total_usd: Math.round(r.runs.reduce((n, x) => n + x.cost_usd, 0) * 1e4) / 1e4,
-      research_seconds: Math.round((research?.duration_ms ?? 0) / 1000),
-      alternatives_seconds: Math.round((run("alternatives")?.duration_ms ?? 0) / 1000),
+      alt_research_cache_write: altResearch?.usage.cache_creation_input_tokens ?? 0,
+      alt_research_cache_read: altResearch?.usage.cache_read_input_tokens ?? 0,
+      alt_research_batched: batchedSearches(r.alternatives.responses),
+      writer_context_tokens: altWrite.usage.cache_creation_input_tokens + altWrite.usage.cache_read_input_tokens,
+      probe_cache_read: r.probe.cache_read_input_tokens,
+      probe_cache_write: r.probe.cache_creation_input_tokens,
+      intake_usd: usd(find("intake")),
+      research_usd: usd(find("research")),
+      alt_research_usd: usd(altResearch),
+      alt_write_usd: usd(altWrite),
+      factcheck_usd: usd(factcheck),
+      total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
+      projected_9_sections_usd: projection.total,
+      claims_checked: before.checked,
+      support_before: `${before.supported}/${before.checked} (${pct(before.rate)})`,
+      partial_before: before.partial,
+      unsupported_before: before.unsupported,
+      fixes: `rewritten ${actions("rewritten")}, estimated ${actions("estimated")}, dropped ${actions("dropped")}, unresolved ${actions("unresolved")}`,
+      support_after: afterRate ? `${afterRate.supported}/${afterRate.checked} (${pct(afterRate.rate)})` : "–",
+      verify_usd: usd(r.after?.run),
       alternatives: r.alternatives.section.alternatives.map((a) => (a.examples ? `${a.name} (${a.examples})` : a.name)).join("; "),
       key_in_section: key.in_section,
       key_in_sources: key.in_sources,
@@ -172,6 +200,61 @@ async function main() {
   writeFileSync(join(dir, "summary.md"), summaryMarkdown(stamp, summary));
   console.table(summary);
   if (results.some((r) => r.status === "rejected")) process.exit(1);
+}
+
+const round = (n: number) => Math.round(n * 1e4) / 1e4;
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+/** True when no text falls between the section's first and last search: issued as one batch rather than one after another. */
+function batchedSearches(responses: StagesResult["responses"]): boolean {
+  const blocks = responses.flatMap((x) => x.message.content.map((b) => b.type));
+  const first = blocks.indexOf("server_tool_use");
+  return first >= 0 && !blocks.slice(first, blocks.lastIndexOf("server_tool_use")).includes("text");
+}
+
+/**
+ * A writer request with a different section prompt and max_tokens: 0. It bills
+ * only input, so its cache read is what each further section writer pays for
+ * the shared context.
+ */
+async function probeSharedContext(r: StagesResult): Promise<TokenUsage> {
+  const msg = await anthropic().messages.create(writerParams(
+    { model: options.alternatives?.model ?? STAGE_MODELS.alternatives, context: r.writerContext, sectionPrompt: "# Section: probe\n\nThis request only measures the cached context." },
+    [{ role: "user", content: WRITE_INSTRUCTION }],
+    0,
+  ));
+  return addUsage(ZERO_USAGE, msg.usage);
+}
+
+/**
+ * Projected cost of a full 9-section report from this run's measurements.
+ * - Intake and shared research: as measured.
+ * - Each section with searches > 0 (sections/config.ts): the alternatives
+ *   research cost, scaled by its configured searches.
+ * - Writers: the shared context grows by what each searching section adds
+ *   (alternatives' addition, scaled by searches). The first writer writes it to
+ *   cache and the other 8 read it. Each writer's own input and output match the
+ *   alternatives writer's, retries included. Verdict and page summaries also
+ *   read the other sections' JSON, about 3k tokens each, uncached.
+ * - Fact-check: the alternatives fact-check × 9.
+ */
+function projectReport(r: StagesResult, m: { altResearch?: StageRun; altWrite: StageRun; factcheck?: StageRun; probe: TokenUsage }) {
+  const writeModel = m.altWrite.model;
+  const sharedOnly = new Set(r.alternatives.added.map((s) => s.id));
+  const ctx0 = writerContext(r.spec, r.sources.filter((s) => !sharedOnly.has(s.id)), [{ label: "Shared research", text: r.notes }]);
+  const p1 = m.probe.cache_read_input_tokens || m.altWrite.usage.cache_creation_input_tokens;
+  const p0 = p1 * (ctx0.length / r.writerContext.length);
+  const altSearches = options.alternatives?.maxSearches ?? SECTIONS.alternatives.searches;
+  const searching = SECTION_NAMES.filter((n) => SECTIONS[n].searches > 0);
+  const p3 = p1 + searching.filter((n) => n !== "alternatives").reduce((t, n) => t + ((p1 - p0) * SECTIONS[n].searches) / altSearches, 0);
+
+  const price = (u: Partial<TokenUsage>) => costUsd(writeModel, { ...ZERO_USAGE, ...u });
+  const ownPart = price({ input_tokens: m.altWrite.usage.input_tokens, output_tokens: m.altWrite.usage.output_tokens });
+  const writers = price({ cache_creation_input_tokens: Math.round(p3) }) + 8 * price({ cache_read_input_tokens: Math.round(p3) })
+    + SECTION_NAMES.length * ownPart + price({ input_tokens: 2 * 3000 });
+  const research = searching.reduce((t, n) => t + ((m.altResearch?.cost_usd ?? 0) * SECTIONS[n].searches) / altSearches, 0);
+  const fixed = r.runs.filter((x) => x.stage === "intake" || x.stage === "research").reduce((t, x) => t + x.cost_usd, 0);
+  return { total: round(fixed + research + writers + (m.factcheck?.cost_usd ?? 0) * SECTION_NAMES.length), context_tokens_9: Math.round(p3) };
 }
 
 // A table to paste into tests/runs-summary.md, which is committed (tests/runs/ is not).

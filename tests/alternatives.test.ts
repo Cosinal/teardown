@@ -4,13 +4,13 @@ import real from "./fixtures/research-response.json";
 import { SAMPLE_REPORT, buildReport, liveSourceBudget } from "../lib/engine/report";
 import type { IdeaSpec } from "../lib/engine/intake";
 import type { SourceStore } from "../lib/engine/research";
-import { mergeSources, parseAlternatives, runAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
+import { parseAlternatives, researchAlternatives, writeAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
+import { mergeSources, parseJsonText, runSectionResearch, writerContext, writerParams } from "../lib/engine/sections/common";
 
 const create = vi.fn();
-const parse = vi.fn();
 vi.mock("../lib/engine/llm", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/engine/llm")>()),
-  anthropic: () => ({ messages: { create, parse } }),
+  anthropic: () => ({ messages: { create } }),
 }));
 
 const src = (id: string, url: string, excerpt = `Quote from ${id}`) => ({ id, url, title: `Page ${id}`, retrieved_at: "2026-10-11T12:00:00.000Z", excerpt });
@@ -93,6 +93,11 @@ describe("buildReport", () => {
     expect(report.sources_retrieved).toBe("2026-10-11");
   });
 
+  it("renders an uncited \"Not public\" price as plain text", () => {
+    const np = { ...section, alternatives: [{ ...section.alternatives[0], price: plain("Not public") }, section.alternatives[1]] };
+    expect(buildReport(np, store).alternatives[0].price).toBe("Not public");
+  });
+
   it("rejects an unknown id and an uncited price", () => {
     expect(() => buildReport({ ...section, scorecard: { ...section.scorecard, source: "S9" } }, store)).toThrow(/unknown source id S9/);
     const uncited = { ...section, alternatives: [{ ...section.alternatives[0], price: plain("Quote only") }] };
@@ -102,7 +107,7 @@ describe("buildReport", () => {
 
 describe("parseAlternatives", () => {
   it("accepts a valid section", () => {
-    expect(parseAlternatives(section, store)).toEqual(section);
+    expect(parseAlternatives(structuredClone(section), store)).toEqual(section);
   });
 
   it("rejects ids missing from the store, and source plus estimate together", () => {
@@ -123,49 +128,103 @@ describe("parseAlternatives", () => {
     expect(() => parseAlternatives(two, store)).toThrow(/at most one workaround/);
   });
 
+  it("keeps a \"Not public\" competitor only when its row cites a source", () => {
+    const np = structuredClone(section);
+    np.alternatives[0].price = plain("not public");
+    expect(parseAlternatives(np, store).alternatives[0].price).toEqual(plain("Not public"));
+    np.alternatives[0].weakness = [plain("Sold as a whole platform.")];
+    expect(() => parseAlternatives(np, store)).toThrow(/"Not public" price needs a product row whose weakness cites a source/);
+  });
+
   it("rejects JSON outside the schema", () => {
     expect(() => parseAlternatives({ alternatives: [] }, store)).toThrow();
   });
 });
 
-describe("runAlternatives (Anthropic mocked)", () => {
-  const spec = { name: "Halifax mobile grooming" } as IdeaSpec;
-  const usage = { input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, server_tool_use: { web_search_requests: 0 } };
-  const research = real.message as unknown as Anthropic.Message;
-  const reply = (parsed: unknown) => ({ model: "claude-sonnet-5-5", stop_reason: "end_turn", usage, parsed_output: parsed, content: [] });
-
-  beforeEach(() => {
-    create.mockReset().mockResolvedValue(research);
-    parse.mockReset();
+describe("parseJsonText", () => {
+  it("reads a bare object, or one inside a code fence or prose", () => {
+    expect(parseJsonText('{"a":1}')).toEqual({ a: 1 });
+    expect(parseJsonText('Here it is:\n```json\n{"a":{"b":[1]}}\n```')).toEqual({ a: { b: [1] } });
   });
 
-  it("merges the section's sources after the shared ones and retries an invalid write once", async () => {
-    const bad = { ...section, scorecard: { ...section.scorecard, finding: "x".repeat(80) } };
-    parse.mockResolvedValueOnce(reply(bad)).mockResolvedValueOnce(reply(section));
-    const r = await runAlternatives(spec, store, "Shared notes.");
+  it("names the problem when there is no valid JSON", () => {
+    expect(() => parseJsonText("Sorry, no.")).toThrow(/no JSON object/);
+    expect(() => parseJsonText('{"a":}')).toThrow(/not valid JSON/);
+  });
+});
 
+describe("writer context", () => {
+  const spec = { name: "Test idea" } as IdeaSpec;
+  const context = writerContext(spec, store, [{ label: "Shared research", text: "Notes [S1]" }, { label: "Empty", text: "" }]);
+
+  it("holds the rules, spec, every source with its quote, and the notes", () => {
+    expect(context).toContain("## Citing");
+    expect(context).toContain('"name": "Test idea"');
+    expect(context).toContain("[S27] Page S27\nURL: https://fundops.example/pricing\nQuoted: Quote from S27");
+    expect(context).toContain("## Shared research\n\nNotes [S1]");
+    expect(context).not.toContain("## Empty");
+  });
+
+  it("is the same cached first system block for every section; only the second block differs", () => {
+    const a = writerParams({ model: "claude-sonnet-5-5", context, sectionPrompt: "Section A" }, []);
+    const b = writerParams({ model: "claude-sonnet-5-5", context, sectionPrompt: "Section B" }, []);
+    const [a0, a1] = a.system as Anthropic.TextBlockParam[];
+    const [b0, b1] = b.system as Anthropic.TextBlockParam[];
+    expect(JSON.stringify(a0)).toBe(JSON.stringify(b0));
+    expect(a0.cache_control).toEqual({ type: "ephemeral" });
+    expect([a1.text, b1.text]).toEqual(["Section A", "Section B"]);
+    expect(JSON.stringify([a.output_config, a.model])).toBe(JSON.stringify([b.output_config, b.model]));
+    expect(a).not.toHaveProperty("tools");
+  });
+});
+
+describe("section stages (Anthropic mocked)", () => {
+  const spec = { name: "Halifax mobile grooming" } as IdeaSpec;
+  const usage = { input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, server_tool_use: { web_search_requests: 0 } };
+  const reply = (text: string) => ({ model: "claude-sonnet-5-5", stop_reason: "end_turn", usage, content: [{ type: "text", text }] });
+
+  beforeEach(() => {
+    create.mockReset();
+  });
+
+  it("makes no API call for a section with 0 searches", async () => {
+    const r = await runSectionResearch("alternatives", { spec, store, notes: "", searches: 0, model: "claude-sonnet-5-5", prompt: "alternatives-research.v1" });
+    expect(create).not.toHaveBeenCalled();
+    expect(r).toEqual({ sources: store, changed: [], notes: "", run: null, responses: [] });
+  });
+
+  it("merges the section's sources after the shared ones", async () => {
+    create.mockResolvedValue(real.message as unknown as Anthropic.Message);
+    const r = await researchAlternatives(spec, store, "Shared notes.");
     // The fixture's three quoted pages follow the shared store's S27.
     expect(r.sources.map((s) => s.id)).toEqual(["S1", "S2", "S27", "S28", "S29", "S30"]);
     expect(r.changed.map((s) => s.id)).toEqual(["S28", "S29", "S30"]);
     expect(r.notes).toContain("[S30]");
-    expect(r.section).toEqual(section);
+    expect(r.run).toMatchObject({ stage: "alternatives", step: "research", prompt_version: "alternatives-research.v1" });
+    expect(create.mock.calls[0][0].tools[0]).toMatchObject({ max_uses: 6 });
+  });
 
-    expect(parse).toHaveBeenCalledTimes(2);
-    const retry = parse.mock.calls[1][0].messages;
+  it("writes from the shared context and retries an invalid write once", async () => {
+    const bad = { ...section, scorecard: { ...section.scorecard, finding: "x".repeat(80) } };
+    create.mockResolvedValueOnce(reply(JSON.stringify(bad))).mockResolvedValueOnce(reply(`\`\`\`json\n${JSON.stringify(section)}\n\`\`\``));
+    const context = writerContext(spec, store, []);
+    const r = await writeAlternatives(context, store);
+
+    expect(r.value).toEqual(section);
+    expect(create).toHaveBeenCalledTimes(2);
+    const first = create.mock.calls[0][0];
+    expect(first.system[0]).toEqual({ type: "text", text: context, cache_control: { type: "ephemeral" } });
+    expect(first.system[1].text).toContain(`at most ${liveSourceBudget()} distinct`);
+    expect(first).not.toHaveProperty("output_config.format");
+    const retry = create.mock.calls[1][0].messages;
     expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: longer than 56/);
-    const request = parse.mock.calls[0][0];
-    expect(request.messages[0].content).toContain("[S30]");
-    expect(request.system).toContain(`at most ${liveSourceBudget()} distinct`);
-
-    expect(r.run).toMatchObject({ stage: "alternatives", prompt_version: "alternatives-research.v1+alternatives-write.v2" });
-    // The research fixture's usage (Opus-sized, 10 searches) plus two writer calls, priced at Sonnet rates.
-    expect(r.run.usage.web_search_requests).toBe(10);
-    expect(r.run.usage.input_tokens).toBe(206014 + 2000);
+    expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v3" });
+    expect(r.run.usage.input_tokens).toBe(2000);
   });
 
   it("gives up after the retry", async () => {
-    parse.mockResolvedValue(reply({ ...section, market_gap: [found("x", "S99")] }));
-    await expect(runAlternatives(spec, store, "")).rejects.toThrow(/writer output invalid: market_gap\[0\]: S99/);
-    expect(parse).toHaveBeenCalledTimes(2);
+    create.mockResolvedValue(reply("I could not find enough sources."));
+    await expect(writeAlternatives("ctx", store)).rejects.toThrow(/alternatives: writer output invalid: no JSON object/);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 });

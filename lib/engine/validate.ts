@@ -1,6 +1,7 @@
-import type {
-  Alternative, Assumption, Basis, Blocker, Channel, Claim, DemandSignal, Figure, Level, NextTest,
-  Rating, Rich, ScoreEntry, Source, TeardownReport,
+import {
+  PRICE_NOT_PUBLIC,
+  type Alternative, type Assumption, type Basis, type Blocker, type Channel, type Claim, type DemandSignal, type Figure,
+  type Level, type NextTest, type Rating, type Rich, type ScoreEntry, type Source, type TeardownReport,
 } from "./types";
 
 // Every page of the report is a fixed US Letter sheet, so content has hard
@@ -165,7 +166,7 @@ export function parseReport(input: unknown): TeardownReport {
         name: str(o.name, `${p}.name`, 26),
         ...(workaround ? { workaround } : { examples: str(o.examples, `${p}.examples`, 30) }),
         what_it_does: str(o.what_it_does, `${p}.what_it_does`, 64),
-        price: claim(30)(o.price, `${p}.price`),
+        price: o.price === PRICE_NOT_PUBLIC ? PRICE_NOT_PUBLIC : claim(30)(o.price, `${p}.price`),
         weakness: rich(90)(o.weakness, `${p}.weakness`),
       };
     }),
