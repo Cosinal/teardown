@@ -3,7 +3,7 @@ import { init, sql } from "@/lib/db";
 import type { IntakeInput } from "./input";
 import { INTAKE_PROMPT, runIntake, type IdeaSpec } from "./intake";
 import type { StageRun } from "./llm";
-import { RESEARCH_PROMPT, runResearch, type SourceStore } from "./research";
+import { RESEARCH_PROMPT, runResearch, type ResearchOptions, type SourceStore } from "./research";
 
 export interface StagesResult {
   spec: IdeaSpec;
@@ -66,7 +66,12 @@ export async function getSources(id: string): Promise<SourceStore> {
  * Runs intake and research for a queued teardown and records each stage.
  * Billable: callers must gate this behind payment (see CLAUDE.md).
  */
-export async function runStages(id: string): Promise<StagesResult> {
+export interface StageOptions {
+  intake?: { model?: string };
+  research?: ResearchOptions;
+}
+
+export async function runStages(id: string, options: StageOptions = {}): Promise<StagesResult> {
   await init();
   const rows = await sql()`SELECT status, input FROM teardowns WHERE id = ${id}`;
   if (!rows.length) throw new Error(`Teardown ${id} not found`);
@@ -75,12 +80,12 @@ export async function runStages(id: string): Promise<StagesResult> {
 
   try {
     await setStatus(id, "intake");
-    const intake = await runIntake(input);
+    const intake = await runIntake(input, options.intake);
     await sql()`UPDATE teardowns SET idea_spec = ${JSON.stringify(intake.spec)}::jsonb WHERE id = ${id}`;
     await recordRun(id, intake.run);
 
     await setStatus(id, "research");
-    const research = await runResearch(intake.spec);
+    const research = await runResearch(intake.spec, options.research);
     await saveSources(id, research.sources);
     await sql()`UPDATE teardowns SET research_notes = ${research.notes} WHERE id = ${id}`;
     await recordRun(id, research.run);

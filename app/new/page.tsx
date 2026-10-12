@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
 import IntakeForm from "@/components/IntakeForm";
+import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import "@/styles/new.css";
 
 export const metadata: Metadata = {
@@ -7,7 +10,10 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function NewTeardown() {
+// Gated behind ADMIN_KEY until /privacy and /data cover intake data (see CLAUDE.md).
+// Unlock once with /new?key=ADMIN_KEY (proxy.ts sets the cookie).
+export default async function NewTeardown() {
+  if (!isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value)) notFound();
   return (
     <>
       <header><div className="wrap"><a href="/">Teardown</a><span>New teardown</span></div></header>

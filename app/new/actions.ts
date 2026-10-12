@@ -1,6 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { IntakeInputSchema } from "@/lib/engine/input";
 import { createTeardown } from "@/lib/engine/store";
 
@@ -9,6 +11,8 @@ export type FormState = { errors: Partial<Record<string, string>>; values: Recor
 // Queues a teardown and sends the founder to its page. It deliberately does not
 // run the engine: that is billable work and waits for payment (see CLAUDE.md).
 export async function submitIdea(_prev: FormState, form: FormData): Promise<FormState> {
+  // Server actions can be invoked from any route, so the /new gate is checked here too.
+  if (!isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value)) notFound();
   const values: Record<string, string> = {};
   for (const [k, v] of form.entries()) if (typeof v === "string") values[k] = v;
 

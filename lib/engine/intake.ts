@@ -2,7 +2,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { IntakeInput } from "./input";
 import { BILLING } from "./input";
-import { MODEL, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
 
 export const INTAKE_PROMPT = "intake.v1";
 
@@ -71,10 +71,13 @@ export function formatInput(input: IntakeInput): string {
 }
 
 /** Intake: turns the form input into an IdeaSpec. One structured-output call, no tools. */
-export async function runIntake(input: IntakeInput): Promise<{ spec: IdeaSpec; run: StageRun }> {
+export async function runIntake(
+  input: IntakeInput,
+  { model = STAGE_MODELS.intake }: { model?: string } = {},
+): Promise<{ spec: IdeaSpec; run: StageRun }> {
   const started = new Date();
   const msg = await anthropic().messages.parse({
-    model: MODEL,
+    model,
     max_tokens: 16000,
     output_config: { effort: "medium", format: zodOutputFormat(IdeaSpecSchema) },
     system: loadPrompt(INTAKE_PROMPT),
@@ -91,7 +94,7 @@ export async function runIntake(input: IntakeInput): Promise<{ spec: IdeaSpec; r
       prompt_version: INTAKE_PROMPT,
       model: msg.model,
       usage,
-      cost_usd: costUsd(MODEL, usage),
+      cost_usd: costUsd(model, usage),
       started_at: started.toISOString(),
       duration_ms: Date.now() - started.getTime(),
     },

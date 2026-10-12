@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import real from "./fixtures/research-response.json";
-import { buildSourceStore, normalizeUrl, notesText } from "../lib/engine/research";
+import { buildSourceStore, normalizeUrl, notesText, researchParams } from "../lib/engine/research";
 
 // A trimmed response in the shape the API returns for web search: result
 // blocks carry only url/title/encrypted content; readable text arrives as
@@ -89,5 +89,33 @@ describe("buildSourceStore on a real response", () => {
 describe("normalizeUrl", () => {
   it("ignores host case, fragments and a trailing slash", () => {
     expect(normalizeUrl("https://Example.com/a/#x")).toBe(normalizeUrl("https://example.com/a"));
+  });
+});
+
+describe("researchParams", () => {
+  const spec = { name: "Test" } as Parameters<typeof researchParams>[0];
+  const opts = { model: "claude-sonnet-5-5", maxSearches: 6 };
+
+  it("caches the tools + system + spec prefix and the growing tail", () => {
+    const p = researchParams(spec, opts);
+    expect(p.cache_control).toEqual({ type: "ephemeral" });
+    const first = p.messages[0].content as Anthropic.TextBlockParam[];
+    expect(first[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(first[0].text).toContain('"name": "Test"');
+  });
+
+  it("applies the search limit to the tool and the prompt", () => {
+    const p = researchParams(spec, { ...opts, maxSearches: 3 });
+    expect(p.tools?.[0]).toMatchObject({ type: "web_search_20250305", max_uses: 3 });
+    expect(p.system).toContain("at most 3 searches");
+    expect(p.system).not.toContain("{{");
+  });
+
+  it("keeps the prefix byte-identical across pause_turn continuations", () => {
+    const cont: Anthropic.MessageParam[] = [{ role: "assistant", content: [{ type: "text", text: "..." }] }];
+    const a = researchParams(spec, opts);
+    const b = researchParams(spec, opts, cont);
+    expect(JSON.stringify([b.tools, b.system, b.messages[0]])).toBe(JSON.stringify([a.tools, a.system, a.messages[0]]));
+    expect(b.messages).toHaveLength(2);
   });
 });

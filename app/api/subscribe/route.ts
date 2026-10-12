@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { isAdminKey } from "@/lib/admin";
 import { init, sql, POLICY_VERSION } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -6,11 +6,6 @@ export const dynamic = "force-dynamic";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REF_RE = /^[A-Za-z0-9._~-]{1,64}$/;
-
-function isAdmin(key: string | null) {
-  const a = process.env.ADMIN_KEY || "";
-  return !!a && typeof key === "string" && key.length === a.length && timingSafeEqual(Buffer.from(key), Buffer.from(a));
-}
 
 function cleanRef(v: unknown) {
   const s = typeof v === "string" ? v.trim() : "";
@@ -20,7 +15,7 @@ function cleanRef(v: unknown) {
 // Admin: list all signups. GET /api/subscribe?key=ADMIN_KEY
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
-  if (!isAdmin(params.get("key"))) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!isAdminKey(params.get("key"))) return Response.json({ error: "unauthorized" }, { status: 401 });
   await init();
   const rows = await sql()`SELECT email, created_at, consent, policy_version, ref FROM signups ORDER BY created_at`;
   return Response.json({ count: rows.length, signups: rows });
@@ -29,7 +24,7 @@ export async function GET(req: Request) {
 // Admin: delete one signup. DELETE /api/subscribe?key=ADMIN_KEY&email=...
 export async function DELETE(req: Request) {
   const params = new URL(req.url).searchParams;
-  if (!isAdmin(params.get("key"))) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!isAdminKey(params.get("key"))) return Response.json({ error: "unauthorized" }, { status: 401 });
   await init();
   const email = String(params.get("email") || "").trim().toLowerCase();
   const r = await sql()`DELETE FROM signups WHERE email = ${email} RETURNING id`;
