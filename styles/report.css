@@ -216,3 +216,18 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
   .td-sheet{box-shadow: none; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact}
   .td-sheet:last-child{break-after: auto}
 }
+
+/* Cooking state: a teardown that has no report yet. One sheet, same header. */
+.td-sheet.is-cooking{height:auto;min-height:420px}
+.td-cooking{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:40px 0}
+.td-cooking .td-h1{max-width:20ch}
+.td-steps{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:19px;color:#5C626B}
+.td-steps li{display:flex;align-items:center;gap:10px}
+.td-steps li::before{content:"";width:7px;height:7px;box-sizing:border-box;border:1px solid currentColor}
+.td-steps li.is-done{color:#14161A}
+.td-steps li.is-done::before{background:currentColor}
+.td-steps li.is-now{color:var(--accent);font-weight:600}
+.td-steps li.is-now::before{animation:td-pulse 1.2s ease-in-out infinite}
+@keyframes td-pulse{50%{background:currentColor}}
+@media (prefers-reduced-motion:reduce){.td-steps li.is-now::before{animation:none;background:currentColor}}
+@media (max-width:880px){.td-doc{padding:16px}.td-sheet.is-cooking{width:100%;padding:24px 20px}}
