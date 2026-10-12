@@ -7,17 +7,19 @@ export const MODELS = {
   sonnet: "claude-sonnet-5-5",
 } as const;
 
-export type Stage = "intake" | "research";
+export type Stage = "intake" | "research" | "alternatives";
 
 /**
  * Default model per stage. Intake runs on Opus: it costs 1-3 cents, and on
  * Sonnet its queries stopped naming known competitors, which research then
- * missed (tests/runs-summary.md). Research is search work and runs on Sonnet.
+ * missed (tests/runs-summary.md). Research is search work and runs on Sonnet,
+ * as do sections (their own searches plus a writer call).
  * Each stage function also takes a `model` option to override this.
  */
 export const STAGE_MODELS: Record<Stage, string> = {
   intake: MODELS.opus,
   research: MODELS.sonnet,
+  alternatives: MODELS.sonnet,
 };
 
 // USD per million tokens, from https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-10-11).

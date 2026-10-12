@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 const STEPS: [string, TeardownStatus[]][] = [
   ["Reading your idea", ["queued", "intake"]],
   ["Searching the market", ["research"]],
-  ["Writing the readout", ["researched"]],
+  ["Writing the readout", ["researched", "alternatives", "drafted"]],
 ];
 
 function Cooking({ status, idea }: { status: TeardownStatus; idea: string }) {

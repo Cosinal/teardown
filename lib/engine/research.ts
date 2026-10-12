@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { IdeaSpec } from "./intake";
-import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun, type TokenUsage } from "./llm";
 
 export const RESEARCH_PROMPT = "research.v2";
 
@@ -8,7 +8,7 @@ export const RESEARCH_PROMPT = "research.v2";
 export const MAX_SEARCHES = 6;
 /** Requests allowed per stage: the first plus pause_turn continuations. */
 const MAX_REQUESTS = 4;
-const EXCERPT_MAX = 1200;
+export const EXCERPT_MAX = 1200;
 
 /** A web page the research stage found. Later stages may only cite these ids. */
 export interface Source {
@@ -102,17 +102,16 @@ export interface ResearchOptions {
 }
 
 /**
- * The request for one research call. Everything up to and including the spec
- * is a fixed prefix across the stage's requests, so it carries a cache
- * breakpoint (tools, then system, then the spec). The top-level cache_control
- * moves a second breakpoint to the end of each pause_turn continuation. With
- * caching on, the server also caches after each web search result, so each
- * search step re-reads earlier results at the cache-read rate instead of full
- * input price. All writes use the default 5-minute TTL.
+ * The request for one search call. Everything up to and including the request
+ * text is a fixed prefix across the stage's requests, so it carries a cache
+ * breakpoint (tools, then system, then the request). The top-level
+ * cache_control moves a second breakpoint to the end of each pause_turn
+ * continuation. With caching on, the server also caches after each web search
+ * result, so each search step re-reads earlier results at the cache-read rate
+ * instead of full input price. All writes use the default 5-minute TTL.
  */
-export function researchParams(
-  spec: IdeaSpec,
-  { model, maxSearches }: Required<ResearchOptions>,
+export function searchParams(
+  { model, maxSearches, system, request }: { model: string; maxSearches: number; system: string; request: string },
   continuation: Anthropic.MessageParam[] = [],
 ): Anthropic.MessageCreateParamsNonStreaming {
   return {
@@ -120,17 +119,50 @@ export function researchParams(
     max_tokens: 16000,
     output_config: { effort: "medium" },
     cache_control: { type: "ephemeral" },
-    system: loadPrompt(RESEARCH_PROMPT).replaceAll("{{max_searches}}", String(maxSearches)),
+    system: system.replaceAll("{{max_searches}}", String(maxSearches)),
     // The basic variant on purpose. web_search_20260209 (dynamic filtering) runs
     // searches from code execution, so results never come back as citable
     // blocks and the response has no citations, which leaves the SourceStore
     // with no excerpts (measured 2026-10-11: 0 excerpts across 292 sources).
     tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxSearches }],
     messages: [
-      { role: "user", content: [{ type: "text", text: researchRequest(spec), cache_control: { type: "ephemeral" } }] },
+      { role: "user", content: [{ type: "text", text: request, cache_control: { type: "ephemeral" } }] },
       ...continuation,
     ],
   };
+}
+
+export function researchParams(
+  spec: IdeaSpec,
+  { model, maxSearches }: Required<ResearchOptions>,
+  continuation: Anthropic.MessageParam[] = [],
+): Anthropic.MessageCreateParamsNonStreaming {
+  return searchParams({ model, maxSearches, system: loadPrompt(RESEARCH_PROMPT), request: researchRequest(spec) }, continuation);
+}
+
+export type SearchResponse = { message: Anthropic.Message; retrieved_at: string };
+
+/** Runs one search conversation, resuming pause_turn up to MAX_REQUESTS requests. */
+export async function searchLoop(
+  stage: string,
+  params: (continuation: Anthropic.MessageParam[]) => Anthropic.MessageCreateParamsNonStreaming,
+): Promise<{ responses: SearchResponse[]; usage: TokenUsage }> {
+  const continuation: Anthropic.MessageParam[] = [];
+  const responses: SearchResponse[] = [];
+  let usage = ZERO_USAGE;
+
+  for (let i = 0; i < MAX_REQUESTS; i++) {
+    const message = await anthropic().messages.create(params(continuation));
+    responses.push({ message, retrieved_at: new Date().toISOString() });
+    usage = addUsage(usage, message.usage);
+    if (message.stop_reason !== "pause_turn") {
+      assertFinished(message, stage);
+      break;
+    }
+    // Resume: send the paused turn back as is; the server continues from it.
+    continuation.push({ role: "assistant", content: message.content });
+  }
+  return { responses, usage };
 }
 
 /**
@@ -142,25 +174,11 @@ export async function runResearch(spec: IdeaSpec, options: ResearchOptions = {})
   notes: string;
   run: StageRun;
   /** Raw API responses, for debugging and fixtures. */
-  responses: { message: Anthropic.Message; retrieved_at: string }[];
+  responses: SearchResponse[];
 }> {
   const started = new Date();
   const opts = { model: options.model ?? STAGE_MODELS.research, maxSearches: options.maxSearches ?? MAX_SEARCHES };
-  const continuation: Anthropic.MessageParam[] = [];
-  const responses: { message: Anthropic.Message; retrieved_at: string }[] = [];
-  let usage = ZERO_USAGE;
-
-  for (let i = 0; i < MAX_REQUESTS; i++) {
-    const message = await anthropic().messages.create(researchParams(spec, opts, continuation));
-    responses.push({ message, retrieved_at: new Date().toISOString() });
-    usage = addUsage(usage, message.usage);
-    if (message.stop_reason !== "pause_turn") {
-      assertFinished(message, "research");
-      break;
-    }
-    // Resume: send the paused turn back as is; the server continues from it.
-    continuation.push({ role: "assistant", content: message.content });
-  }
+  const { responses, usage } = await searchLoop("research", (continuation) => researchParams(spec, opts, continuation));
 
   const sources = buildSourceStore(responses);
   if (!sources.length) throw new Error("research: no sources found");

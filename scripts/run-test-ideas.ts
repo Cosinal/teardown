@@ -1,26 +1,30 @@
-// Runs intake + research on the three test ideas and writes everything to
-// tests/runs/<timestamp>/. Billable: each idea costs real API money.
+// Runs intake, research and the Existing Alternatives section on the three test
+// ideas, builds the partial report (live alternatives, the rest from the
+// sample), and writes everything to tests/runs/<timestamp>/. Billable: each
+// idea costs real API money.
 //
 //   npm run test:ideas            # also stores teardowns + sources in Neon when DATABASE_URL is set
 //   npm run test:ideas -- --no-db # API only
 //   npm run test:ideas -- --only b-dog-grooming
 //   npm run test:ideas -- --max-searches 10 --research-model claude-opus-5-5 --intake-model claude-opus-5-5
+//   npm run test:ideas -- --alternatives-searches 4 --alternatives-model claude-opus-5-5
 //
 // Needs ANTHROPIC_API_KEY (and optionally DATABASE_URL) in .env.local or the environment.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { IntakeInput } from "../lib/engine/input";
-import { runIntake } from "../lib/engine/intake";
-import { runResearch } from "../lib/engine/research";
-import { createTeardown, runStages, type StageOptions, type StagesResult } from "../lib/engine/store";
+import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
+import { buildReport } from "../lib/engine/report";
+import { createTeardown, runStages } from "../lib/engine/store";
 
 try {
   process.loadEnvFile(".env.local");
 } catch {}
 
 // Each test idea as given, split into the intake form's fields.
-const IDEAS: { slug: string; brief: string; input: IntakeInput }[] = [
+// `key` lists competitors the alternatives section should surface, checked in the summary.
+const IDEAS: { slug: string; brief: string; input: IntakeInput; key?: string[] }[] = [
   {
     slug: "a-teardown",
     brief: "One-page business idea teardowns for first-time founders, $5–10 per report, online",
@@ -53,6 +57,8 @@ const IDEAS: { slug: string; brief: string; input: IntakeInput }[] = [
       billing: "subscription",
       geography: "Canada and US",
     },
+    // LP-document tools (Canoe, FundRecs) and reconciliation / fund-ops platforms (Limina, Arcesium, FundGuard).
+    key: ["Canoe", "FundRecs", "Limina", "Arcesium", "FundGuard"],
   },
 ];
 
@@ -61,6 +67,10 @@ const only = flag("--only");
 const options: StageOptions = {
   intake: { model: flag("--intake-model") },
   research: { model: flag("--research-model"), maxSearches: flag("--max-searches") ? Number(flag("--max-searches")) : undefined },
+  alternatives: {
+    model: flag("--alternatives-model"),
+    maxSearches: flag("--alternatives-searches") ? Number(flag("--alternatives-searches")) : undefined,
+  },
 };
 const ideas = only ? IDEAS.filter((i) => i.slug === only) : IDEAS;
 const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
@@ -70,9 +80,17 @@ async function run(input: IntakeInput): Promise<StagesResult & { id: string | nu
     const id = await createTeardown(input);
     return { id, ...(await runStages(id, options)) };
   }
-  const intake = await runIntake(input, options.intake);
-  const research = await runResearch(intake.spec, options.research);
-  return { id: null, spec: intake.spec, sources: research.sources, notes: research.notes, runs: [intake.run, research.run], responses: research.responses };
+  return { id: null, ...(await runPipeline(input, options)) };
+}
+
+/** Which of the idea's key competitors appear in the section's text, and in any source or note. */
+function keyCompetitors(idea: (typeof IDEAS)[number], r: StagesResult) {
+  if (!idea.key) return { in_section: "–", in_sources: "–" };
+  const has = (text: string) => idea.key!.filter((k) => text.toLowerCase().includes(k.toLowerCase()));
+  const section = has(JSON.stringify(r.alternatives.section));
+  const sources = has([...r.sources.map((s) => `${s.url} ${s.title} ${s.excerpt}`), r.notes, r.alternatives.notes].join(" "));
+  const show = (found: string[]) => `${found.length}/${idea.key!.length}${found.length ? `: ${found.join(", ")}` : ""}`;
+  return { in_section: show(section), in_sources: show(sources) };
 }
 
 // Search results carry large opaque encrypted_content; drop it from the saved raw responses.
@@ -105,6 +123,11 @@ async function main() {
     write("notes.md", `${r.notes}\n`);
     write("runs.json", r.runs);
     write("research-raw.json", `${JSON.stringify(r.responses, stripEncrypted, 2)}\n`);
+    write("alternatives.json", r.alternatives.section);
+    write("alternatives-notes.md", `${r.alternatives.notes}\n`);
+    write("alternatives-raw.json", `${JSON.stringify(r.alternatives.responses, stripEncrypted, 2)}\n`);
+    // Live alternatives, scorecard.alternatives and market_gap; every other section from the sample.
+    write("report.json", buildReport(r.alternatives.section, r.sources));
     console.log(`✓ ${idea.slug}: ${r.sources.length} sources, $${r.runs.reduce((n, x) => n + x.cost_usd, 0).toFixed(4)}`);
     return r;
   }));
@@ -114,14 +137,18 @@ async function main() {
     if (res.status === "rejected") return { slug: idea.slug, error: String(res.reason) };
     const r = res.value;
     const cost = (stage: string) => r.runs.find((x) => x.stage === stage)?.cost_usd ?? 0;
-    const research = r.runs.find((x) => x.stage === "research");
+    const run = (stage: string) => r.runs.find((x) => x.stage === stage);
+    const research = run("research");
+    const searches = (stage: string) => run(stage)?.usage.web_search_requests ?? 0;
+    const key = keyCompetitors(idea, r);
     return {
       slug: idea.slug,
       teardown_id: r.id,
       models: r.runs.map((x) => `${x.stage}=${x.model}`).join(" "),
       queries: r.spec.search_queries.length,
       ambiguities: r.spec.ambiguities.length,
-      web_searches: r.runs.reduce((n, x) => n + x.usage.web_search_requests, 0),
+      web_searches: searches("research"),
+      alt_searches: searches("alternatives"),
       sources: r.sources.length,
       search_results: new Set(r.responses.flatMap(({ message }) => message.content.flatMap((b) =>
         b.type === "web_search_tool_result" && Array.isArray(b.content) ? b.content.map((x) => x.url) : []))).size,
@@ -131,8 +158,13 @@ async function main() {
       research_output_tokens: research?.usage.output_tokens ?? 0,
       intake_usd: cost("intake"),
       research_usd: cost("research"),
-      total_usd: Math.round((cost("intake") + cost("research")) * 1e4) / 1e4,
-      research_seconds: Math.round((r.runs.find((x) => x.stage === "research")?.duration_ms ?? 0) / 1000),
+      alternatives_usd: cost("alternatives"),
+      total_usd: Math.round(r.runs.reduce((n, x) => n + x.cost_usd, 0) * 1e4) / 1e4,
+      research_seconds: Math.round((research?.duration_ms ?? 0) / 1000),
+      alternatives_seconds: Math.round((run("alternatives")?.duration_ms ?? 0) / 1000),
+      alternatives: r.alternatives.section.alternatives.map((a) => (a.examples ? `${a.name} (${a.examples})` : a.name)).join("; "),
+      key_in_section: key.in_section,
+      key_in_sources: key.in_sources,
     };
   });
   mkdirSync(dir, { recursive: true });

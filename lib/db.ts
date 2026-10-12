@@ -47,6 +47,8 @@ export function init() {
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS stage_runs JSONB NOT NULL DEFAULT '[]'`;
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS error TEXT`;
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
+    // Written report sections keyed by name, e.g. {"alternatives": {...}}, citing source ids.
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '{}'`;
     await q`CREATE TABLE IF NOT EXISTS sources (
       teardown_id TEXT NOT NULL REFERENCES teardowns(id),
       source_id TEXT NOT NULL,
