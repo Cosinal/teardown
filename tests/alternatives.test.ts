@@ -88,7 +88,8 @@ describe("buildReport", () => {
     const d = report.demand_evidence[0].detail;
     const s = SAMPLE_REPORT.demand_evidence[0].detail;
     expect(report.sources[d.source - 1]).toEqual(SAMPLE_REPORT.sources[s.source - 1]);
-    expect(report.sources).toHaveLength(3 + (20 - liveSourceBudget()));
+    // The sample's other sections cite 10 of its 14 sources.
+    expect(report.sources).toHaveLength(3 + 10);
     expect(report.date).toBe("2026-10-12");
     expect(report.sources_retrieved).toBe("2026-10-11");
   });
@@ -222,9 +223,9 @@ describe("section stages (Anthropic mocked)", () => {
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 
-  it("gives up after the retry", async () => {
+  it("gives up after two retries", async () => {
     create.mockResolvedValue(reply("I could not find enough sources."));
     await expect(writeAlternatives("ctx", store)).rejects.toThrow(/alternatives: writer output invalid: no JSON object/);
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(3);
   });
 });

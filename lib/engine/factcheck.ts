@@ -19,6 +19,10 @@ import { PRICE_NOT_PUBLIC } from "./types";
 // rewritten to what the source says, re-tagged as estimates, or dropped;
 // partly supported ones may be narrowed. Every fix is re-validated against
 // the section rules and reverted if it breaks them.
+//
+// The checking itself is section-agnostic (claims in, verdicts out). Each
+// section supplies a SectionCheck that lists its claims and applies fixes; the
+// one for Existing Alternatives lives here, the others in their section modules.
 
 export const FACTCHECK_PROMPT = "factcheck.v3";
 export const FACTCHECK_GAP_PROMPT = "factcheck-gap.v1";
@@ -102,6 +106,36 @@ export function claimRequest(c: CheckClaim, source: Source | undefined, page?: s
   }, null, 2);
 }
 
+/** A fix the checker asked for, or a fallback when it doesn't fit. */
+export type FixHow = "rewrite" | "estimate" | "drop" | "drop_row";
+
+/** A fixed copy of a section, and how to log the fix. */
+export interface Fixed<T> {
+  section: T;
+  action: "rewritten" | "estimated" | "dropped";
+  result?: string;
+  /** The row the fix removed, so the row's other claims are logged as dropped. */
+  droppedRow?: number;
+}
+
+/** How fact-check reads and fixes one kind of section. */
+export interface SectionCheck<T> {
+  /** Every part the section cites as found, in section order. */
+  claims(section: T): CheckClaim[];
+  /** Applies one fix to a copy of the section. Null when the fix has nowhere to go. */
+  fix(section: T, id: string, how: FixHow, r: CheckResult): Fixed<T> | null;
+  /** Fixes to try, in order, after the wanted one fails for an unsupported claim. */
+  fallbacks(id: string): FixHow[];
+  /** Sort key: claims are fixed in descending order, so removing one never shifts the index of one still to come. */
+  rank(id: string): number[];
+  /** The row a claim sits in, when removing that row removes the claim. */
+  row(id: string): number | undefined;
+  /** Validates a section against its rules. Throws when it breaks them. */
+  parse(section: T): T;
+  /** Adjusts the section once every fix is in, e.g. a count of rows. */
+  finish?(draft: T, fixed: T): T;
+}
+
 type Location =
   | { kind: "price"; row: number }
   | { kind: "weakness"; row: number; part: number }
@@ -120,7 +154,7 @@ function locate(id: string): Location {
 }
 
 /** Applies one fix to a copy of the section. Returns null when the fix has nowhere to go. */
-function fix(section: AlternativesSection, loc: Location, action: "rewrite" | "estimate" | "drop" | "drop_row", r: CheckResult): AlternativesSection | null {
+function fix(section: AlternativesSection, loc: Location, action: FixHow, r: CheckResult): AlternativesSection | null {
   const s: AlternativesSection = structuredClone(section);
   const text = r.text?.trim();
   const method = r.method?.trim();
@@ -170,50 +204,77 @@ function fix(section: AlternativesSection, loc: Location, action: "rewrite" | "e
   return s;
 }
 
-/** Claims in an order where removing one never shifts the index of one still to come. */
-function order(claims: CheckClaim[]): CheckClaim[] {
-  const rank = (id: string) => {
-    const loc = locate(id);
-    if (loc.kind === "scorecard") return [0, 0, 0];
-    if (loc.kind === "gap") return [1, loc.part, 0];
-    return [2, loc.row, loc.kind === "weakness" ? loc.part + 1 : 0];
+/** Fact-check's view of the Existing Alternatives section. */
+export function alternativesCheck(store: SourceStore, maxSources = liveSourceBudget()): SectionCheck<AlternativesSection> {
+  return {
+    claims: collectClaims,
+    fix(section, id, how, r) {
+      const loc = locate(id);
+      const s = fix(section, loc, how, r);
+      if (!s) return null;
+      if (how === "drop_row" && "row" in loc) return { section: s, action: "dropped", result: "(row dropped)", droppedRow: loc.row };
+      // The scorecard is never dropped: it falls back to an estimate.
+      if (loc.kind === "scorecard" && how !== "rewrite") return { section: s, action: "estimated", result: s.scorecard.estimate ?? undefined };
+      if (how === "drop") return { section: s, action: "dropped", ...(loc.kind === "price" && { result: PRICE_NOT_PUBLIC }) };
+      if (how === "estimate") return { section: s, action: "estimated", result: r.method ?? undefined };
+      return { section: s, action: "rewritten", result: r.text ?? undefined };
+    },
+    fallbacks(id) {
+      const loc = locate(id);
+      return loc.kind === "price" || loc.kind === "weakness" ? ["drop", "drop_row"] : ["drop"];
+    },
+    rank(id) {
+      const loc = locate(id);
+      if (loc.kind === "scorecard") return [0, 0, 0];
+      if (loc.kind === "gap") return [1, loc.part, 0];
+      return [2, loc.row, loc.kind === "weakness" ? loc.part + 1 : 0];
+    },
+    row(id) {
+      const loc = locate(id);
+      return "row" in loc ? loc.row : undefined;
+    },
+    parse: (s) => parseAlternatives(s, store, maxSources),
+    finish(draft, fixed) {
+      // A scorecard that counted the rows must count the rows that are left.
+      const rows = fixed.alternatives.length;
+      if (rows < draft.alternatives.length && fixed.scorecard.key_figure.value === String(draft.alternatives.length)) {
+        return { ...fixed, scorecard: { ...fixed.scorecard, key_figure: { ...fixed.scorecard.key_figure, value: String(rows) } } };
+      }
+      return fixed;
+    },
   };
-  return [...claims].sort((a, b) => {
-    const x = rank(a.id), y = rank(b.id);
-    return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];
-  });
 }
 
 /**
  * Applies the checker's verdicts. Supported claims stay. A partial claim is
  * narrowed when the checker rewrote it. An unsupported claim is rewritten,
- * re-tagged as an estimate, or dropped, falling back to dropping it (or its
- * row) when the requested fix breaks the section rules. A claim no fix fits is
- * left as is and logged as unresolved.
+ * re-tagged as an estimate, or dropped, falling back to the section's own
+ * fallbacks (e.g. dropping the claim, then its row) when the requested fix
+ * breaks the section rules. A claim no fix fits is left as is and logged as
+ * unresolved.
  */
-export function applyFactcheck(
-  section: AlternativesSection,
-  claims: CheckClaim[],
-  results: CheckResult[],
-  store: SourceStore,
-  maxSources = liveSourceBudget(),
-): { section: AlternativesSection; log: ClaimCheck[] } {
+export function applyChecks<T>(check: SectionCheck<T>, section: T, claims: CheckClaim[], results: CheckResult[]): { section: T; log: ClaimCheck[] } {
   const byId = new Map(results.map((r) => [r.id, r]));
-  const valid = (s: AlternativesSection | null) => {
-    if (!s) return null;
+  const valid = (f: Fixed<T> | null): Fixed<T> | null => {
+    if (!f) return null;
     try {
-      return parseAlternatives(structuredClone(s), store, maxSources);
+      return { ...f, section: check.parse(structuredClone(f.section)) };
     } catch {
       return null;
     }
   };
+  const ordered = [...claims].sort((a, b) => {
+    const x = check.rank(a.id), y = check.rank(b.id);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((y[i] ?? 0) !== (x[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0);
+    return 0;
+  });
   let current = section;
   const droppedRows = new Set<number>();
   const log: ClaimCheck[] = [];
 
-  for (const c of order(claims)) {
+  for (const c of ordered) {
     const r = byId.get(c.id)!;
-    const loc = locate(c.id);
+    const row = check.row(c.id);
     const entry: Omit<ClaimCheck, "action"> = {
       id: c.id, text: c.text, source: c.source, verdict: r.verdict, reason: r.reason,
       ...(r.basis && { basis: r.basis }),
@@ -221,7 +282,7 @@ export function applyFactcheck(
       ...(r.quote && { quote: r.quote }),
       ...(r.fetch_error && { fetch_error: r.fetch_error }),
     };
-    if ("row" in loc && droppedRows.has(loc.row)) {
+    if (row !== undefined && droppedRows.has(row)) {
       log.push({ ...entry, action: "dropped", result: "(row dropped)" });
       continue;
     }
@@ -229,50 +290,39 @@ export function applyFactcheck(
       log.push({ ...entry, action: "kept" });
       continue;
     }
-    type How = "rewrite" | "estimate" | "drop" | "drop_row";
-    const wanted: How = r.verdict === "partial" || r.action === "rewrite" ? "rewrite" : r.action === "estimate" ? "estimate" : "drop";
-    // Partial claims that can't be narrowed are kept; unsupported ones fall back to dropping the claim, then its row.
-    const fallbacks: How[] = loc.kind === "price" || loc.kind === "weakness" ? ["drop", "drop_row"] : ["drop"];
+    const wanted: FixHow = r.verdict === "partial" || r.action === "rewrite" ? "rewrite" : r.action === "estimate" ? "estimate" : "drop";
     // A claim the excerpt partly supported is never dropped on the page's say-so (see checkClaims): if the page's fix doesn't fit, it stays.
     const keepIfStuck = r.verdict === "partial" || (r.basis === "page" && r.excerpt_verdict === "partial");
-    const tries: How[] = keepIfStuck ? [wanted] : [...new Set<How>([wanted, ...fallbacks])];
-    let applied: { s: AlternativesSection; how: (typeof tries)[number] } | null = null;
+    const tries: FixHow[] = keepIfStuck ? [wanted] : [...new Set<FixHow>([wanted, ...check.fallbacks(c.id)])];
+    let applied: Fixed<T> | null = null;
     for (const how of tries) {
-      const s = valid(fix(current, loc, how, r));
-      if (s) {
-        applied = { s, how };
-        break;
-      }
+      applied = valid(check.fix(current, c.id, how, r));
+      if (applied) break;
     }
     if (!applied) {
       log.push({ ...entry, action: keepIfStuck ? "kept" : "unresolved" });
       continue;
     }
-    current = applied.s;
-    const how = applied.how;
-    if (how === "drop_row" && "row" in loc) {
-      droppedRows.add(loc.row);
-      log.push({ ...entry, action: "dropped", result: "(row dropped)" });
-    } else if (loc.kind === "scorecard" && how !== "rewrite") {
-      // The scorecard is never dropped: it falls back to an estimate.
-      log.push({ ...entry, action: "estimated", result: current.scorecard.estimate ?? undefined });
-    } else if (how === "drop") {
-      log.push({ ...entry, action: "dropped", ...(loc.kind === "price" && { result: PRICE_NOT_PUBLIC }) });
-    } else if (how === "estimate") {
-      log.push({ ...entry, action: "estimated", result: r.method ?? undefined });
-    } else {
-      log.push({ ...entry, action: "rewritten", result: r.text ?? undefined });
-    }
+    current = applied.section;
+    if (applied.droppedRow !== undefined) droppedRows.add(applied.droppedRow);
+    log.push({ ...entry, action: applied.action, ...(applied.result !== undefined && { result: applied.result }) });
   }
-  // A scorecard that counted the rows must count the rows that are left.
-  const rows = current.alternatives.length;
-  if (rows < section.alternatives.length && current.scorecard.key_figure.value === String(section.alternatives.length)) {
-    current = { ...current, scorecard: { ...current.scorecard, key_figure: { ...current.scorecard.key_figure, value: String(rows) } } };
-  }
+  if (check.finish) current = check.finish(section, current);
   // Report the log in section order.
   const index = new Map(claims.map((c, i) => [c.id, i]));
   log.sort((a, b) => index.get(a.id)! - index.get(b.id)!);
   return { section: current, log };
+}
+
+/** applyChecks for the Existing Alternatives section. */
+export function applyFactcheck(
+  section: AlternativesSection,
+  claims: CheckClaim[],
+  results: CheckResult[],
+  store: SourceStore,
+  maxSources = liveSourceBudget(),
+): { section: AlternativesSection; log: ClaimCheck[] } {
+  return applyChecks(alternativesCheck(store, maxSources), section, claims, results);
 }
 
 const GapSchema = z.object({ parts: z.array(z.object({ keep: z.number().int().nullable(), text: z.string().nullable() })) });
@@ -413,7 +463,7 @@ async function judge(claim: CheckClaim, source: Source | undefined, model: strin
  * the module comment). Returns the final verdicts, the excerpt-only ones, and
  * the store with verified page quotes added to the excerpts.
  */
-export async function checkClaims(section: AlternativesSection, store: SourceStore, options: CheckOptions = {}): Promise<{
+export async function checkClaimList(claims: CheckClaim[], store: SourceStore, options: CheckOptions = {}): Promise<{
   claims: CheckClaim[];
   results: CheckResult[];
   /** Verdicts against the excerpt alone, before any page was fetched. */
@@ -424,7 +474,6 @@ export async function checkClaims(section: AlternativesSection, store: SourceSto
   run: StageRun | null;
 }> {
   const model = options.model ?? STAGE_MODELS.factcheck;
-  const claims = collectClaims(section);
   if (!claims.length) return { claims, results: [], excerptResults: [], store, changed: [], run: null };
   const started = new Date();
   const byId = new Map(store.map((s) => [s.id, s]));
@@ -493,44 +542,71 @@ export async function checkClaims(section: AlternativesSection, store: SourceSto
   };
 }
 
-/**
- * Checks every cited claim and applies the fixes. When the market gap's cited
- * parts changed, one more call makes the rest of the paragraph consistent with
- * them. The run's `claims` logs each verdict and action, `pages` each page
- * fetched, and `repairs` the gap before and after. `sources` is the store with
- * verified page quotes added; `changed` lists the sources that gained one.
- */
-export async function runFactcheck(section: AlternativesSection, store: SourceStore, options: CheckOptions = {}): Promise<{
-  section: AlternativesSection;
+/** checkClaimList over the Existing Alternatives section's claims. */
+export function checkClaims(section: AlternativesSection, store: SourceStore, options: CheckOptions = {}) {
+  return checkClaimList(collectClaims(section), store, options);
+}
+
+export interface FactcheckOutput<T> {
+  section: T;
   log: ClaimCheck[];
   results: CheckResult[];
   excerptResults: CheckResult[];
   sources: SourceStore;
   changed: SourceStore;
   run: StageRun | null;
-}> {
+}
+
+/**
+ * Checks every cited claim in one section and applies the fixes. `check` is
+ * built from the store with verified page quotes added, since the section's
+ * rules are checked against that store. The run's `claims` logs each verdict
+ * and action, `pages` each page fetched, and `section` names the section.
+ */
+export async function factcheckSection<T>(
+  name: string,
+  makeCheck: (store: SourceStore) => SectionCheck<T>,
+  section: T,
+  store: SourceStore,
+  options: CheckOptions = {},
+): Promise<FactcheckOutput<T>> {
   const model = options.model ?? STAGE_MODELS.factcheck;
-  const checked = await checkClaims(section, store, { ...options, model });
+  const checked = await checkClaimList(makeCheck(store).claims(section), store, { ...options, model });
   const { claims, results, excerptResults, run } = checked;
   const sources = checked.store;
-  const applied = applyFactcheck(section, claims, results, sources);
-  const base = { results, excerptResults, sources, changed: checked.changed };
-  if (!run) return { ...applied, ...base, run };
+  // A section with no found claims still goes through finish (e.g. a recount).
+  const applied = applyChecks(makeCheck(sources), section, claims, results);
+  return {
+    ...applied, results, excerptResults, sources, changed: checked.changed,
+    run: run && { ...run, section: name, claims: applied.log },
+  };
+}
 
-  let out = applied.section;
+/**
+ * factcheckSection for Existing Alternatives. When the market gap's cited
+ * parts changed, one more call makes the rest of the paragraph consistent with
+ * them; the run's `repairs` logs the gap before and after.
+ */
+export async function runFactcheck(section: AlternativesSection, store: SourceStore, options: CheckOptions = {}): Promise<FactcheckOutput<AlternativesSection>> {
+  const model = options.model ?? STAGE_MODELS.factcheck;
+  const checked = await factcheckSection("alternatives", (s) => alternativesCheck(s), section, store, { ...options, model });
+  const { run, sources } = checked;
+  if (!run) return checked;
+
+  let out = checked.section;
   let usage = run.usage;
   const repairs: NonNullable<StageRun["repairs"]> = [];
-  if (gapChanged(applied.log)) {
+  if (gapChanged(checked.log)) {
     const msg = await anthropic().messages.parse({
       model,
       max_tokens: 4000,
       output_config: { effort: "medium", format: zodOutputFormat(GapSchema) },
       system: loadPrompt(FACTCHECK_GAP_PROMPT),
-      messages: [{ role: "user", content: gapRepairRequest(section.market_gap, out.market_gap, applied.log) }],
+      messages: [{ role: "user", content: gapRepairRequest(section.market_gap, out.market_gap, checked.log) }],
     });
     usage = addUsage(usage, msg.usage);
     assertFinished(msg, "factcheck");
-    const gap = msg.parsed_output && assembleGap(out.market_gap, msg.parsed_output, supportedGapParts(out.market_gap, applied.log));
+    const gap = msg.parsed_output && assembleGap(out.market_gap, msg.parsed_output, supportedGapParts(out.market_gap, checked.log));
     const candidate = gap && { ...out, market_gap: gap };
     try {
       if (candidate) {
@@ -542,15 +618,13 @@ export async function runFactcheck(section: AlternativesSection, store: SourceSt
     }
   }
   return {
+    ...checked,
     section: out,
-    log: applied.log,
-    ...base,
     run: {
       ...run,
       prompt_version: repairs.length ? `${FACTCHECK_PROMPT}+${FACTCHECK_GAP_PROMPT}` : run.prompt_version,
       usage,
       cost_usd: costUsd(model, usage),
-      claims: applied.log,
       ...(repairs.length && { repairs }),
     },
   };

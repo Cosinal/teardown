@@ -15,7 +15,7 @@ export const ALTERNATIVES_RESEARCH_PROMPT = "alternatives-research.v1";
 export const ALTERNATIVES_WRITE_PROMPT = "alternatives-write.v3";
 
 /** A text part. `source` is a SourceStore id; `estimate` is the method of our own estimate. Both null: plain text. */
-const PartSchema = z.object({ text: z.string(), source: z.string().nullable(), estimate: z.string().nullable() });
+export const PartSchema = z.object({ text: z.string(), source: z.string().nullable(), estimate: z.string().nullable() });
 export type Part = z.infer<typeof PartSchema>;
 
 // Lengths are left to buildReport, which applies the report's own limits.

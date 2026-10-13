@@ -8,7 +8,7 @@ export const MODELS = {
   haiku: "claude-haiku-5-5",
 } as const;
 
-export type Stage = "intake" | "research" | "alternatives" | "factcheck";
+export type Stage = "intake" | "research" | "alternatives" | "demand_evidence" | "economics" | "factcheck";
 
 /**
  * Default model per stage. Intake runs on Opus: it costs 1-3 cents, and on
@@ -16,7 +16,7 @@ export type Stage = "intake" | "research" | "alternatives" | "factcheck";
  * missed (tests/runs-summary.md). Research is search work and runs on Sonnet,
  * as do sections (their own searches plus a writer call). All section writers
  * must share one model and effort, or they stop sharing the cached sources
- * prefix (lib/engine/sections/writer.ts). Fact-check reads only the cited
+ * prefix (lib/engine/sections/common.ts). Fact-check reads only the cited
  * excerpts, so it needs no shared cache and runs on Haiku.
  * Each stage function also takes a `model` option to override this.
  */
@@ -24,6 +24,8 @@ export const STAGE_MODELS: Record<Stage, string> = {
   intake: MODELS.opus,
   research: MODELS.sonnet,
   alternatives: MODELS.sonnet,
+  demand_evidence: MODELS.sonnet,
+  economics: MODELS.sonnet,
   factcheck: MODELS.haiku,
 };
 
@@ -60,6 +62,8 @@ export interface StageRun {
   cost_usd: number;
   started_at: string;
   duration_ms: number;
+  /** Fact-check only: the section it checked. */
+  section?: string;
   /** Fact-check only: the verdict and action for each cited claim. */
   claims?: ClaimCheck[];
   /** Fact-check only: each page fetched to re-check a claim, once per URL. */

@@ -9,6 +9,8 @@ import { runPipeline, type StageOptions, type StagesResult, type TeardownStatus 
 import { RESEARCH_PROMPT, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT } from "./sections/alternatives";
 import { WRITER_SHARED_PROMPT } from "./sections/common";
+import { DEMAND_RESEARCH_PROMPT, DEMAND_WRITE_PROMPT } from "./sections/demand";
+import { ECONOMICS_RESEARCH_PROMPT, ECONOMICS_WRITE_PROMPT } from "./sections/economics";
 
 export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
 
@@ -17,7 +19,8 @@ export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
 
 /** Stored in teardowns.prompt_version: every stage's prompt version in this pipeline. */
 export const PIPELINE_VERSION = [
-  INTAKE_PROMPT, RESEARCH_PROMPT, ALTERNATIVES_RESEARCH_PROMPT, WRITER_SHARED_PROMPT, ALTERNATIVES_WRITE_PROMPT, FACTCHECK_PROMPT, FACTCHECK_GAP_PROMPT,
+  INTAKE_PROMPT, RESEARCH_PROMPT, ALTERNATIVES_RESEARCH_PROMPT, DEMAND_RESEARCH_PROMPT, ECONOMICS_RESEARCH_PROMPT, WRITER_SHARED_PROMPT,
+  ALTERNATIVES_WRITE_PROMPT, DEMAND_WRITE_PROMPT, ECONOMICS_WRITE_PROMPT, FACTCHECK_PROMPT, FACTCHECK_GAP_PROMPT,
 ].join("+");
 
 export function newTeardownId() {

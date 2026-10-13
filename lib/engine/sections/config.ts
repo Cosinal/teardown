@@ -10,8 +10,8 @@
 
 export const SECTIONS = {
   alternatives: { searches: 6, live: true },
-  demand_evidence: { searches: 4, live: false },
-  economics: { searches: 4, live: false },
+  demand_evidence: { searches: 4, live: true },
+  economics: { searches: 4, live: true },
   distribution: { searches: 0, live: false },
   blockers: { searches: 0, live: false },
   riskiest_assumptions: { searches: 0, live: false },

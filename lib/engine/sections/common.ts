@@ -20,8 +20,13 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
  * cache key, so a section that changed any of them would stop sharing the prefix.
  */
 const WRITER_EFFORT = "medium";
-/** Writer calls allowed per section: the first, plus one retry that is told what failed. */
-const WRITE_ATTEMPTS = 2;
+/**
+ * Writer calls allowed per section: the first, plus retries that are told what
+ * failed. Two retries: writers miss character limits often enough that one
+ * retry lost whole teardowns (tests/runs-summary.md), and a retry only re-reads
+ * the cached context.
+ */
+const WRITE_ATTEMPTS = 3;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -69,6 +74,12 @@ export function sectionResearchRequest(spec: IdeaSpec, store: SourceStore, notes
   ].join("\n\n");
 }
 
+/** Per-section overrides, e.g. for test runs. Writers must share one model to share the cached context. */
+export interface SectionOptions {
+  model?: string;
+  maxSearches?: number;
+}
+
 export interface SectionResearch {
   /** The shared store plus this section's new sources. */
   sources: SourceStore;
@@ -82,29 +93,44 @@ export interface SectionResearch {
 }
 
 /**
+ * A section's own searches, against the shared research. Null when it runs no
+ * searches. The results are merged into the store separately (mergeResearch),
+ * so several sections can search at once and still merge in a fixed order.
+ */
+export async function searchSection(
+  stage: Stage,
+  { spec, store, notes, searches, model, prompt }: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
+): Promise<{ responses: SearchResponse[]; run: StageRun } | null> {
+  if (searches <= 0) return null;
+  const started = new Date();
+  const { responses, usage } = await searchLoop(stage, (continuation) => searchParams({
+    model, maxSearches: searches, system: loadPrompt(prompt), request: sectionResearchRequest(spec, store, notes),
+  }, continuation));
+  return {
+    responses,
+    run: {
+      stage, step: "research", prompt_version: prompt, model: responses[0].message.model, usage,
+      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+    },
+  };
+}
+
+/** Merges a section's search results into the store. Notes are tagged with ids from the merged store. */
+export function mergeResearch(store: SourceStore, searched: { responses: SearchResponse[]; run: StageRun } | null): SectionResearch {
+  if (!searched) return { sources: store, changed: [], notes: "", run: null, responses: [] };
+  const { sources, changed } = mergeSources(store, buildSourceStore(searched.responses));
+  return { sources, changed, notes: notesText(searched.responses, sources), run: searched.run, responses: searched.responses };
+}
+
+/**
  * A section's own web research, merged into the shared store. With 0 searches
  * it makes no API call and returns the store unchanged.
  */
 export async function runSectionResearch(
   stage: Stage,
-  { spec, store, notes, searches, model, prompt }: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
+  args: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
 ): Promise<SectionResearch> {
-  if (searches <= 0) return { sources: store, changed: [], notes: "", run: null, responses: [] };
-  const started = new Date();
-  const { responses, usage } = await searchLoop(stage, (continuation) => searchParams({
-    model, maxSearches: searches, system: loadPrompt(prompt), request: sectionResearchRequest(spec, store, notes),
-  }, continuation));
-  const { sources, changed } = mergeSources(store, buildSourceStore(responses));
-  return {
-    sources,
-    changed,
-    notes: notesText(responses, sources),
-    run: {
-      stage, step: "research", prompt_version: prompt, model: responses[0].message.model, usage,
-      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
-    },
-    responses,
-  };
+  return mergeResearch(args.store, await searchSection(stage, args));
 }
 
 /**
@@ -192,7 +218,7 @@ export async function runWriter<T>(
       retries.push(problem.slice(0, 500));
       messages.push(
         { role: "assistant", content: text || "(empty reply)" },
-        { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it, and reply with the whole JSON object again.` },
+        { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it (count the characters of every field that has a limit), and reply with the whole JSON object again.` },
       );
     }
   }

@@ -1,7 +1,7 @@
 import {
   PRICE_NOT_PUBLIC,
   type Alternative, type Assumption, type Basis, type Blocker, type Channel, type Claim, type DemandSignal, type Figure,
-  type Level, type NextTest, type Rating, type Rich, type ScoreEntry, type Source, type TeardownReport,
+  type Level, type NextTest, type Rating, type Rich, type ScoreEntry, type Source, type TeardownReport, type Working,
 } from "./types";
 
 // Every page of the report is a fixed US Letter sheet, so content has hard
@@ -11,6 +11,7 @@ export const LIMITS = {
   alternatives: 5,
   demand_evidence: 4,
   market_inputs: 3,
+  workings: 5,
   distribution: 3,
   blockers: 3,
   riskiest_assumptions: 3,
@@ -37,7 +38,7 @@ function obj(v: unknown, path: string): Obj {
 
 function str(v: unknown, path: string, max: number): string {
   if (typeof v !== "string" || !v.trim()) fail(path, "expected a non-empty string");
-  if (v.length > max) fail(path, `longer than ${max} characters`);
+  if (v.length > max) fail(path, `longer than ${max} characters (${v.length})`);
   return v;
 }
 
@@ -91,7 +92,7 @@ export function parseReport(input: unknown): TeardownReport {
     if (Array.isArray(x)) {
       const parts = list(x, p, 1, 4, part);
       const total = parts.reduce((n, y) => n + (typeof y === "string" ? y : y.text).length, 0);
-      if (total > max) fail(p, `longer than ${max} characters`);
+      if (total > max) fail(p, `longer than ${max} characters (${total})`);
       return parts;
     }
     return part(x, p);
@@ -120,8 +121,8 @@ export function parseReport(input: unknown): TeardownReport {
   const sc = obj(r.scorecard, "scorecard");
   const ps = obj(r.page_summaries, "page_summaries");
   const econ = obj(r.economics, "economics");
-  const size = obj(econ.market_size, "economics.market_size");
   const unit = obj(econ.unit, "economics.unit");
+  if ((unit.max_cac === undefined) === (unit.break_even === undefined)) fail("economics.unit", "expected either max_cac or break_even");
 
   const assumptions = list<Assumption>(r.riskiest_assumptions, "riskiest_assumptions", 1, LIMITS.riskiest_assumptions, (x, p) => {
     const o = obj(x, p);
@@ -171,7 +172,8 @@ export function parseReport(input: unknown): TeardownReport {
       };
     }),
     market_gap: rich(LEN.long)(r.market_gap, "market_gap"),
-    demand_evidence: list<DemandSignal>(r.demand_evidence, "demand_evidence", 1, LIMITS.demand_evidence, (x, p) => {
+    // Empty when no checkable signal was found; the page says so.
+    demand_evidence: list<DemandSignal>(r.demand_evidence, "demand_evidence", 0, LIMITS.demand_evidence, (x, p) => {
       const o = obj(x, p);
       return {
         signal: str(o.signal, `${p}.signal`, 26),
@@ -181,16 +183,27 @@ export function parseReport(input: unknown): TeardownReport {
       };
     }),
     economics: {
-      market_size: marketSize(
-        list(size.inputs, "economics.market_size.inputs", 2, LIMITS.market_inputs, figure(7)),
-        figure(7)(size.result, "economics.market_size.result"),
-      ),
+      ...(econ.market_size !== undefined && {
+        market_size: marketSize(
+          list(obj(econ.market_size, "economics.market_size").inputs, "economics.market_size.inputs", 2, LIMITS.market_inputs, figure(7)),
+          figure(7)(obj(econ.market_size, "economics.market_size").result, "economics.market_size.result"),
+        ),
+      }),
+      ...(econ.per !== undefined && { per: str(econ.per, "economics.per", 24) }),
+      ...(econ.currency !== undefined && { currency: str(econ.currency, "economics.currency", 3) }),
       unit: {
         price: figure(LEN.big)(unit.price, "economics.unit.price"),
         cost_to_serve: figure(LEN.big)(unit.cost_to_serve, "economics.unit.cost_to_serve"),
-        max_cac: figure(LEN.big)(unit.max_cac, "economics.unit.max_cac"),
+        ...(unit.max_cac !== undefined && { max_cac: figure(LEN.big)(unit.max_cac, "economics.unit.max_cac") }),
+        ...(unit.break_even !== undefined && { break_even: figure(LEN.big)(unit.break_even, "economics.unit.break_even") }),
         margin: figure(LEN.big)(unit.margin, "economics.unit.margin"),
       },
+      ...(econ.workings !== undefined && {
+        workings: list<Working>(econ.workings, "economics.workings", 1, LIMITS.workings, (x, p) => {
+          const o = obj(x, p);
+          return { label: str(o.label, `${p}.label`, 16), value: str(o.value, `${p}.value`, 22), note: rich(130)(o.note, `${p}.note`) };
+        }),
+      }),
     },
     distribution: list<Channel>(r.distribution, "distribution", 1, LIMITS.distribution, (x, p) => {
       const o = obj(x, p);
