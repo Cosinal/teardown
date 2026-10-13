@@ -231,11 +231,11 @@ Run notes:
 
 No section comes from the sample any more. After the three searching sections are written and fact-checked, the six with `searches: 0` are written from the same cached writer context plus a second cached block, the finished sections so far as text with every figure in them: Idea, Distribution and Blockers together, then Riskiest Assumptions, then Next Tests, then Verdict (with the three page summaries) last. Teardown rows `89Nzo5Yk5Kx0`, `xd_zLbC6o2Kd`, `prwgV0IKJPnq`; each now ends `done` with its report saved.
 
-| Idea | Full report | Later writers (incl. revisions) | Fact-check | Web claims supported: excerpt → pages → fresh re-check | Internal checks | Contradictions (between / within sections) |
+| Idea | Full report | Later writers (incl. revisions) | Fact-check | Web claims supported after fact-check (excerpt → pages) | Internal checks | Contradictions from new sections |
 |---|---|---|---|---|---|---|
-| a-teardown | **$1.08** | $0.20 | $0.013 | 82% → 94% (16/17) → 88% (15/17) | 9/11 | 0 / 1 |
-| b-dog-grooming | **$1.14** | $0.18 | $0.014 | 50% → 56% (9/16) → 88% (14/16) | 10/11 | 0 / 0 |
-| c-nav-reconciliation | **$1.18** | $0.20 | $0.009 | 75% → 83% (10/12) → 100% (12/12) | 9/11 | 0 / 1 |
+| a-teardown | **$1.08** | $0.20 | $0.013 | 88% (15/17) (82% → 94%) | 9/11 | 0 (1 inherited, below) |
+| b-dog-grooming | **$1.14** | $0.18 | $0.014 | 88% (14/16) (50% → 56%) | 10/11 | 0 |
+| c-nav-reconciliation | **$1.18** | $0.20 | $0.009 | 100% (12/12) (75% → 83%) | 9/11 | 0 between sections (1 inside Next Tests) |
 
 Verdicts, all "test first, low confidence":
 
@@ -252,13 +252,15 @@ How the numbers are held together:
 
 Fact-check:
 
-- **Web-cited claims** in Distribution and Blockers go through the same per-claim check as the other sections. "Support rate after fact-check" above counts only these (all five web-cited sections), as before.
+- **Web-cited claims** in Distribution and Blockers go through the same per-claim check as the other sections. The support rate above is a fresh re-check of the fixed sections, as "after" in earlier entries, over all five web-cited sections; internal checks are counted separately.
 - **Internal checks.** Idea is judged against intake's reading of the founder's idea, each assumption's evidence line and the four summaries against the finished sections, with the same checker. In the first run the checker's own rewrites made things worse (c: "the report found no third-party price", when it does; c's market summary became "both serve managers"), so these checks now only judge. When a claim isn't fully supported, the writer revises once with the checker's reasons, and the revision stands if it checks at least as well. Revisions ran in a (idea, assumptions, verdict), b (assumptions) and c (assumptions, verdict).
-- **Contradictions** are counted by a test-only audit on Opus that reads the whole report (about $0.03, not in the totals), and by reading each report. Both agree: none between sections. Within sections: a's Existing Alternatives prices the WorthBuild/DimeADozen row at "$9 to $129" while its own market gap says WorthBuild charges $5. c's test 2 sets up 3 calls but its kill threshold counts "5 interested funds". The tests prompt already asks for the same sample; it happened in two runs of three.
+- **Contradictions** are counted by a test-only audit on Opus that reads the whole report (about $0.03, not in the totals), and by reading each report. The new sections introduced none. Two remain:
+  - **a, inherited from Existing Alternatives:** the WorthBuild/DimeADozen row is priced "$9 to $129" while the same section's market gap says WorthBuild charges $5. The Verdict and Assumption 2 repeat the $5, as they should, so the conflict shows between pages 1 and 2. The fix belongs in the Alternatives writer (one row mixing two vendors' prices).
+  - **c, inside Next Tests:** test 2 sets up 3 calls, but its kill threshold counts "5 interested funds". The tests prompt asks for the same sample; this happened in two runs of three.
 
 Earlier runs of the same branch:
 
 - **20-54-08** (first): $0.95 / $1.04 / $1.15, all complete. Found b's assumption saying "each groom loses money" when Economics keeps $32 a groom, and the two checker rewrites above. Fixed in the prompts and by judge-only internal checks.
 - **20-59-14**: a and b failed, both one character over a limit after two retries (a channel name at 35 of 34, a verdict at 161 of 160). Retries were common in every writer: the Idea writer always first answered with cited-part objects, because the shared rules say every text part is one. Writers now get three retries, and the six later prompts say their fields are plain strings and to aim under each limit. The final run had 0–2 retries per writer and no failures.
 
-Cost: the six later writers add $0.18–0.20 a report, revisions included, and their checks under a cent. The full report is $1.08–1.18, under the $1.50 target; Economics' unit-cost estimate for idea a ($1.40) is now close to that.
+Cost: the six later writers add $0.18–0.20 a report, revisions included, and their checks under a cent. The full report is $1.08–1.18 in API spend, under the $1.50 target. With the card fee on a $7.50 sale (about $0.52), Teardown's real unit cost is about $1.60–1.70, so idea a's Economics estimate ($1.40) is still low.
