@@ -156,6 +156,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = li
   if (!/^[A-Z]{3}$/.test(section.currency)) throw new Error("currency: a three-letter ISO code, e.g. USD");
   if (!section.per.trim() || section.per.length > 20) throw new Error("per: 1 to 20 characters");
   if (!section.break_even_unit.trim() || section.break_even_unit.length > 20) throw new Error("break_even_unit: 1 to 20 characters");
+  if (section.scorecard.finding.length > 56) throw new Error(`scorecard.finding: ${section.scorecard.finding.length} characters, at most 56`);
   if (/\d/.test(section.scorecard.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
   if (cited.size > maxSources) throw new Error(`cites ${cited.size} distinct sources and estimate methods, counting the arithmetic; the limit is ${maxSources}`);
   return section;
@@ -220,7 +221,8 @@ export function economicsCheck(store: SourceStore, maxSources = liveSourceBudget
 
 /** The section's own instructions, after the shared writer context. */
 export function economicsPrompt(maxSources = liveSourceBudgets().economics): string {
-  return loadPrompt(ECONOMICS_WRITE_PROMPT).replaceAll("{{max_sources}}", String(maxSources));
+  // The arithmetic is always cited, so the writer's own share is one less.
+  return loadPrompt(ECONOMICS_WRITE_PROMPT).replaceAll("{{own_sources}}", String(maxSources - 1));
 }
 
 /** The section's own searches, merged into the store. */

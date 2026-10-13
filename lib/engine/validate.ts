@@ -38,7 +38,7 @@ function obj(v: unknown, path: string): Obj {
 
 function str(v: unknown, path: string, max: number): string {
   if (typeof v !== "string" || !v.trim()) fail(path, "expected a non-empty string");
-  if (v.length > max) fail(path, `longer than ${max} characters`);
+  if (v.length > max) fail(path, `longer than ${max} characters (${v.length})`);
   return v;
 }
 
@@ -92,7 +92,7 @@ export function parseReport(input: unknown): TeardownReport {
     if (Array.isArray(x)) {
       const parts = list(x, p, 1, 4, part);
       const total = parts.reduce((n, y) => n + (typeof y === "string" ? y : y.text).length, 0);
-      if (total > max) fail(p, `longer than ${max} characters`);
+      if (total > max) fail(p, `longer than ${max} characters (${total})`);
       return parts;
     }
     return part(x, p);

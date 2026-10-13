@@ -101,6 +101,9 @@ export function parseDemand(raw: unknown, store: SourceStore, maxSources = liveS
     if (!s.detail.source || s.detail.estimate) throw new Error(`${path}.detail: must cite the source that states the figure (no estimates)`);
     if (!ids.has(s.detail.source)) throw new Error(`${path}.detail: ${s.detail.source} is not in the source list`);
     if (!/\d/.test(s.value)) throw new Error(`${path}.value: must be the figure the source states`);
+    for (const [field, text, max] of [["signal", s.signal, 26], ["value", s.value, 6], ["detail.text", s.detail.text, 50]] as const) {
+      if (text.length > max) throw new Error(`${path}.${field}: ${text.length} characters, at most ${max}`);
+    }
     cited.add(s.detail.source);
   });
   if (new Set(section.signals.map((s) => s.value)).size < section.signals.length) throw new Error("signals: two signals have the same value");
@@ -110,6 +113,7 @@ export function parseDemand(raw: unknown, store: SourceStore, maxSources = liveS
     throw new Error(`scorecard: thin evidence is rated "weak" and the finding starts with "${THIN}"`);
   }
   if (sc.headline !== null && !headlineSignal(section)) throw new Error("scorecard.headline: must be the value of one of the signals, or null");
+  if (sc.finding.length > 56) throw new Error(`scorecard.finding: ${sc.finding.length} characters, at most 56`);
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
   if (sc.headline === null) cited.add(`estimate:${COUNT_METHOD}`);
   if (cited.size > maxSources) throw new Error(`cites ${cited.size} distinct sources and estimate methods; the limit is ${maxSources}`);

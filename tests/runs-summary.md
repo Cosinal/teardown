@@ -190,3 +190,39 @@ Same code re-applied to the 21-52-32 drafts (the ones fact-check v1/v2 cut down)
 - **Cost.** Fact-check is $0.006–0.016 per section, up from ~$0.002; the page re-checks are $0.003–0.012 of it. At 9 sections that adds about $0.05–0.10 a report. Projections stay at $0.98–1.24, under $1.50.
 - **a's "Do it by hand" row** went on the fresh draft: its price was ChatGPT's plans and its weakness ("takes 2-3 days") isn't on the cited page.
 - **Writer failures.** In a first full run (22-30-24), a and c failed in the writer on length limits (`alternatives[1].name` over 26 characters, `what_it_does` over 64) after its retry. Unrelated to fact-check; a and c were re-run.
+
+## 2026-10-13T01-01-13 — Demand Evidence and Economics live (`demand-*.v1`, `economics-*.v1`), database on
+
+Pipeline: intake → research → three section researches in parallel (alternatives up to 6 searches, demand and economics up to 4 each), merged in a fixed order → alternatives writer (writes the shared cache), then demand and economics writers (read it) → fact-check of each section in turn, one page cache. Teardown rows `cXUaF3kuElkK`, `d89uSve7bE0W`, `wmqnO2NRKwPa`.
+
+| Idea | Total so far | Projected, 9 sections | Searches (shared + alt + demand + econ) | Section research (alt / demand / econ) | Writers | Fact-check |
+|---|---|---|---|---|---|---|
+| a-teardown | $0.969 | **$1.19** | 5 + 6 + 3 + 4 | $0.264 / $0.126 / $0.180 | $0.158 | $0.013 |
+| b-dog-grooming | $0.903 | **$1.04** | 6 + 6 + 3 + 3 | $0.261 / $0.128 / $0.137 | $0.103 | $0.009 |
+| c-nav-reconciliation | $0.936 | **$1.16** | 6 + 5 + 3 + 4 | $0.210 / $0.120 / $0.184 | $0.156 | $0.010 |
+
+The projection is now mostly measured. Every searching section has run, so only the 6 remaining writers (cached context read plus the measured writers' average own tokens, retries included) and 6 more fact-checks (the measured average) are projected.
+
+Support rate (found claims the checker called supported: excerpt → with pages → fresh re-check of the fixed section):
+
+| Idea | Alternatives | Demand | Economics | All |
+|---|---|---|---|---|
+| a-teardown | 5/13 → 6/13 → 10/11 | 1/1 → 1/1 → 1/1 | 2/2 → 2/2 → 2/2 | 50% → 56% → 93% |
+| b-dog-grooming | 5/10 → 6/10 → 8/10 | 1/1 → 1/1 → 1/1 | 1/2 → 2/2 → 2/2 | 54% → 69% → 85% |
+| c-nav-reconciliation | 3/7 → 4/7 → 5/7 | none cited | 0/2 → 1/2 → 1/2 | 33% → 56% → 67% |
+
+Demand and Economics carry few found claims (0–2 each). Demand writes few signals, and most economics figures are estimates, which fact-check doesn't check. Their support rates are too small a sample to mean much.
+
+Section verdicts:
+
+- **a Demand**: thin. One signal: 590 monthly searches for "business idea validation". **a Economics**: strong. $7.50 − $1.50 = 80% margin; $20 a month fixed, so break-even is 4 reports a month. The $1.50 unit cost assumes AI cost per report. This run measured about $0.91–0.97 for three sections and projects $1.04–1.19 for nine, so the true unit cost is closer to $1.60–1.75 with the card fee (≈77% margin).
+- **b Demand**: thin. One signal: 94 Google reviews for one Halifax mobile groomer; no Halifax search or forum data. **b Economics**: weak. $80 − $62 = 23% margin (2.5 h of groomer time at the NS average wage, plus fees and supplies); $2,000 a month fixed, so break-even is 112 grooms a month, more than one groomer can do.
+- **c Demand**: thin. No checkable signal at all; the page shows the empty state. **c Economics**: strong. $2,000 − $355 = 82% margin; $4,000 a month fixed (SOC 2 and tools, estimated), so break-even is 3 customers. Its price benchmark ("below $50K–$500K tools") is only partly supported.
+
+Run notes:
+
+- **Writer retries.** Writers missed character limits or source budgets often: 1/0/2, 0/1/0 and 1/0/2 retries (alternatives/demand/economics). In an earlier attempt (00-56-15) all three ideas failed after one retry, each on a different length limit. Writers now get two retries (`WRITE_ATTEMPTS = 3`), and validation errors now say the actual length. A run at 00-58-24 lost c to a Neon connection error; the run above is the first complete one on the final prompts.
+- **Unit cost and labour.** The 00-58-24 run put b's unit cost at $10 (fees and supplies, no groomer time, 88% margin). `economics-write.v1` now requires per-sale labour at a cited or estimated wage.
+- **Demand padding.** The first run listed "1 Trustpilot review" and "2 ratings" as signals. The prompt now rules out single-digit counts. a's 00-58-24 run still offered "5.2M members of r/Entrepreneur", a generic forum size rather than evidence for this idea. The verdict was still thin, but this kind of stretch is worth watching.
+- **Source budgets.** The report's 20-source page now has three live sections: alternatives 7, demand 4, economics 5, plus the 4 the sample's remaining sections cite. Alternatives' writer asked for 8–9 in most runs and was cut back on retry.
+- **Layout.** b's and c's reports were rendered locally. Page 3 (workings table plus the four unit figures) and page 2 with zero demand signals both fit their sheets.

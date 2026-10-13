@@ -223,9 +223,9 @@ describe("section stages (Anthropic mocked)", () => {
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 
-  it("gives up after the retry", async () => {
+  it("gives up after two retries", async () => {
     create.mockResolvedValue(reply("I could not find enough sources."));
     await expect(writeAlternatives("ctx", store)).rejects.toThrow(/alternatives: writer output invalid: no JSON object/);
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(3);
   });
 });

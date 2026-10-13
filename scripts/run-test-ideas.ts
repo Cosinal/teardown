@@ -250,7 +250,8 @@ function projectReport(r: StagesResult): number {
   const model = writes[0].model;
   const price = (u: Partial<TokenUsage>) => costUsd(model, { ...ZERO_USAGE, ...u });
   const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const read = Math.max(...writes.slice(1).map((w) => w.usage.cache_read_input_tokens), writes[0].usage.cache_creation_input_tokens);
+  // One writer request's context: what the first writer wrote to cache (later reads include retries).
+  const read = writes[0].usage.cache_creation_input_tokens;
   const own = avg(writes.map((w) => price({ input_tokens: w.usage.input_tokens, output_tokens: w.usage.output_tokens })));
   const remaining = SECTION_NAMES.length - 3;
   const writers = remaining * (price({ cache_read_input_tokens: read }) + own) + price({ input_tokens: 2 * 3000 });

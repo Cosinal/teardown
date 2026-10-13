@@ -30,10 +30,11 @@ Rules for each signal:
 - `value`: the figure, exactly as the source gives it or rounded, at most 6 characters, e.g. "6,600", "40+", "212", "$1.2B". It must contain a digit.
 - `detail`: what the figure counts, at most 50 characters, e.g. "US searches a month for 'mobile dog groomer'". It must cite (`source`) the source that states the figure, and `estimate` must be null. The value and detail together are checked against that source.
 - `signal`: a short label, at most 26 characters, e.g. "Search interest".
+- Count characters before you reply: `detail` over 50 or `signal` over 26 fails validation.
 - `rating`: how strongly this signal shows demand for this idea in this geography.
 - No two signals may have the same `value`.
 
-Leave a signal out rather than stretch it. A figure about a broader category, a different geography, or a vendor's own claim about demand is not evidence for this idea. Zero signals is an acceptable answer.
+Leave a signal out rather than stretch it. A signal must be big enough to show demand on its own: a review count in single digits or a thread with a handful of replies is not a signal, so mention its absence in the finding instead. A figure about a broader category, a different geography, or a vendor's own claim about demand is not evidence for this idea. Zero signals is an acceptable answer.
 
 ## evidence
 

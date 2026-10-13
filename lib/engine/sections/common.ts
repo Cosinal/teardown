@@ -20,8 +20,13 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
  * cache key, so a section that changed any of them would stop sharing the prefix.
  */
 const WRITER_EFFORT = "medium";
-/** Writer calls allowed per section: the first, plus one retry that is told what failed. */
-const WRITE_ATTEMPTS = 2;
+/**
+ * Writer calls allowed per section: the first, plus retries that are told what
+ * failed. Two retries: writers miss character limits often enough that one
+ * retry lost whole teardowns (tests/runs-summary.md), and a retry only re-reads
+ * the cached context.
+ */
+const WRITE_ATTEMPTS = 3;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -213,7 +218,7 @@ export async function runWriter<T>(
       retries.push(problem.slice(0, 500));
       messages.push(
         { role: "assistant", content: text || "(empty reply)" },
-        { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it, and reply with the whole JSON object again.` },
+        { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it (count the characters of every field that has a limit), and reply with the whole JSON object again.` },
       );
     }
   }
