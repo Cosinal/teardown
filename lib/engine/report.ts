@@ -1,23 +1,57 @@
-import sample from "./fixtures/sample.json";
+import type { IdeaSpec } from "./intake";
 import type { SourceStore, Source as StoreSource } from "./research";
 import type { AlternativesSection, Part } from "./sections/alternatives";
+import { assumptionsReport, type AssumptionsSection } from "./sections/assumptions";
+import { blockersReport, type BlockersSection } from "./sections/blockers";
 import { demandScore, type DemandSection } from "./sections/demand";
+import { distributionReport, type DistributionSection } from "./sections/distribution";
 import { economicsReport, type EconomicsSection } from "./sections/economics";
+import type { IdeaSection } from "./sections/idea";
+import { testsReport, type TestsSection } from "./sections/tests";
+import type { VerdictSection } from "./sections/verdict";
 import { PRICE_NOT_PUBLIC, type Alternative, type Claim, type DemandSignal, type Figure, type Rich, type ScoreEntry, type Source, type TeardownReport, type Working } from "./types";
-import { LIMITS, ReportError, parseReport } from "./validate";
+import { LIMITS, ReportError, parsePartialReport, parseReport, type PartialReport } from "./validate";
 
-// Turns section output, which cites SourceStore ids ("S12") or estimate
+// Turns section drafts, which cite SourceStore ids ("S12") or estimate
 // methods, into a TeardownReport, which cites 1-based indices into its own
-// `sources`. Sections not yet produced by the engine come from a base report
-// (the sample), with the sources they cite carried over and renumbered.
+// `sources`. Every section comes from the engine; a partial report (some
+// sections only) is validated against the same page limits while the engine
+// is still writing.
 //
-// The live sections share the report's source limit, so each gets its own
-// budget of distinct sources (estimate methods count too).
-
-/** The design's sample report (Teardown's own idea), validated once at load. */
-export const SAMPLE_REPORT: TeardownReport = parseReport(sample);
+// The sections share the report's source limit. The first three each get a
+// fixed budget of distinct sources (estimate methods count too); Distribution
+// and Blockers split whatever is left once those three are written.
 
 const SOURCE_TEXT_MAX = 100;
+
+/** Fixed budgets for the three sections that do their own research. */
+export const SOURCE_BUDGETS: Readonly<Record<"alternatives" | "demand_evidence" | "economics", number>> = { alternatives: 7, demand_evidence: 4, economics: 5 };
+
+/** Distribution and Blockers split the sources the first three sections left unused, Distribution taking the odd one. */
+export function laterBudgets(used: number): { distribution: number; blockers: number } {
+  const left = Math.max(0, LIMITS.sources - used);
+  return { distribution: Math.ceil(left / 2), blockers: Math.floor(left / 2) };
+}
+
+/** Every section as the engine writes it, citing SourceStore ids. */
+export interface Drafts {
+  alternatives: AlternativesSection;
+  demand_evidence: DemandSection;
+  economics: EconomicsSection;
+  idea: IdeaSection;
+  distribution: DistributionSection;
+  blockers: BlockersSection;
+  riskiest_assumptions: AssumptionsSection;
+  next_tests: TestsSection;
+  verdict: VerdictSection;
+}
+
+export interface BuildOptions {
+  /** ISO date the report was produced. Defaults to today. */
+  date?: string;
+  /** The founder's billing, from the idea spec: Distribution judges acquisition cost by payback for a subscription. */
+  billing?: IdeaSpec["revenue_model"]["billing"];
+}
 
 /** True for an uncited "Not public" price, in any case. */
 export function isNotPublic(p: Part): boolean {
@@ -30,67 +64,8 @@ export function sourceText(s: StoreSource): string {
   return t.length > SOURCE_TEXT_MAX ? `${t.slice(0, SOURCE_TEXT_MAX - 1)}…` : t;
 }
 
-type Cited = { basis: unknown; source: unknown };
-const isCite = (v: object): v is Cited => "basis" in v && typeof (v as Cited).source === "number";
-
-/** Calls `fn` on every citation object inside `v` and returns a copy with the results. */
-function mapCites(v: unknown, fn: (c: Cited) => Cited): unknown {
-  if (Array.isArray(v)) return v.map((x) => mapCites(x, fn));
-  if (typeof v !== "object" || v === null) return v;
-  const copy = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mapCites(x, fn)]));
-  return isCite(copy) ? fn(copy) : copy;
-}
-
-export type LiveSection = "alternatives" | "demand_evidence" | "economics";
-const LIVE: LiveSection[] = ["alternatives", "demand_evidence", "economics"];
-/** The report fields each live section replaces. */
-const FIELDS: Record<LiveSection, string[]> = { alternatives: ["alternatives", "market_gap"], demand_evidence: ["demand_evidence"], economics: ["economics"] };
-
-/** The base report without the parts the given live sections replace. */
-function baseRest(base: TeardownReport, live: LiveSection[]): Record<string, unknown> & { scorecard: Record<string, unknown> } {
-  const rest = { ...base, scorecard: { ...base.scorecard } } as Record<string, unknown> & { scorecard: Record<string, unknown> };
-  delete rest.sources;
-  for (const name of live) {
-    for (const k of FIELDS[name]) delete rest[k];
-    delete rest.scorecard[name];
-  }
-  return rest;
-}
-
-/** Base-report sources still cited once the given live sections are replaced, in order. */
-function baseSourcesInUse(base: TeardownReport, live: LiveSection[] = LIVE): number[] {
-  const used = new Set<number>();
-  mapCites(baseRest(base, live), (c) => (used.add(c.source as number), c));
-  return [...used].sort((a, b) => a - b);
-}
-
-/** Fixed budgets for the two smaller sections: four signals plus a count, and three inputs plus the arithmetic. */
-const BUDGET = { demand_evidence: 4, economics: 5 } as const;
-
-/** How many distinct sources each live section may cite, so that all of them together fit LIMITS.sources. */
-export function liveSourceBudgets(base: TeardownReport = SAMPLE_REPORT): Record<LiveSection, number> {
-  const total = LIMITS.sources - baseSourcesInUse(base).length;
-  return { alternatives: total - BUDGET.demand_evidence - BUDGET.economics, ...BUDGET };
-}
-
-/** The Existing Alternatives section's share of liveSourceBudgets. */
-export function liveSourceBudget(base: TeardownReport = SAMPLE_REPORT): number {
-  return liveSourceBudgets(base).alternatives;
-}
-
-/**
- * Builds a report with the live sections given and every other section from
- * `base`; null alternatives also come from `base`. Found citations take their
- * URL from the SourceStore, never from the model. Throws ReportError if the
- * result breaks the report's limits.
- */
-export function buildReport(
-  section: AlternativesSection | null,
-  store: SourceStore,
-  { base = SAMPLE_REPORT, date = new Date().toISOString().slice(0, 10), demand, economics }: {
-    base?: TeardownReport; date?: string; demand?: DemandSection; economics?: EconomicsSection;
-  } = {},
-): TeardownReport {
+/** The report fields for the drafts given, unvalidated. */
+function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date().toISOString().slice(0, 10), billing }: BuildOptions): Record<string, unknown> {
   const byId = new Map(store.map((s) => [s.id, s]));
   const sources: Source[] = [];
   const index = new Map<string, number>();
@@ -129,11 +104,12 @@ export function buildReport(
     return { rating: s.rating, key_figure: s.key_figure, finding: s.finding, basis, source };
   };
 
-  // Live sections in page order, so sources are numbered as the reader meets them.
-  const live: Record<string, unknown> = {};
+  // Cited sections in page order, so sources are numbered as the reader meets them.
+  const out: Record<string, unknown> = {};
   const scores: Record<string, ScoreEntry> = {};
+  const { alternatives: section, demand_evidence: demand, economics, distribution, blockers } = drafts;
   if (section) {
-    live.alternatives = section.alternatives.map((a, i): Alternative => {
+    out.alternatives = section.alternatives.map((a, i): Alternative => {
       const p = `alternatives[${i}]`;
       return {
         name: a.name,
@@ -143,12 +119,12 @@ export function buildReport(
         weakness: rich(a.weakness, `${p}.weakness`),
       };
     });
-    live.market_gap = rich(section.market_gap, "market_gap");
+    out.market_gap = rich(section.market_gap, "market_gap");
     const sc = section.scorecard;
     scores.alternatives = score({ ...sc, part: { text: sc.finding, source: sc.source, estimate: sc.estimate } }, "scorecard.alternatives");
   }
   if (demand) {
-    live.demand_evidence = demand.signals.map((s, i): DemandSignal => (
+    out.demand_evidence = demand.signals.map((s, i): DemandSignal => (
       { signal: s.signal, rating: s.rating, value: s.value, detail: claim(s.detail, `demand_evidence[${i}].detail`) }
     ));
     scores.demand_evidence = score(demandScore(demand), "scorecard.demand_evidence");
@@ -156,7 +132,7 @@ export function buildReport(
   if (economics) {
     const e = economicsReport(economics);
     const figure = (f: { value: string; label: string; note: Part[] }, path: string): Figure => ({ value: f.value, label: f.label, note: rich(f.note, `${path}.note`) });
-    live.economics = {
+    out.economics = {
       per: e.per,
       currency: e.currency,
       unit: {
@@ -169,18 +145,53 @@ export function buildReport(
     };
     scores.economics = score(e.score, "scorecard.economics");
   }
+  if (distribution) {
+    if (!economics) throw new ReportError("distribution: needs the economics section");
+    const d = distributionReport(distribution, economics, billing === "subscription");
+    out.distribution = d.channels.map((c, i) => ({ ...c, reason: rich(c.reason, `distribution[${i}].reason`) }));
+    scores.distribution = score(d.score, "scorecard.distribution");
+  }
+  if (blockers) {
+    const b = blockersReport(blockers);
+    out.blockers = b.blockers.map((x, i) => ({ ...x, detail: claim(x.detail, `blockers[${i}].detail`) }));
+    scores.blockers = score(b.score, "scorecard.blockers");
+  }
+  if (drafts.riskiest_assumptions) out.riskiest_assumptions = assumptionsReport(drafts.riskiest_assumptions);
+  if (drafts.next_tests) out.next_tests = testsReport(drafts.next_tests);
+  if (drafts.idea) out.idea = drafts.idea;
+  if (drafts.verdict) {
+    const { page_summaries, ...verdict } = drafts.verdict;
+    out.verdict = verdict;
+    out.page_summaries = page_summaries;
+  }
 
-  // The base's other sections follow, with their sources renumbered after the live ones.
-  const replaced = LIVE.filter((n) => n in scores);
-  const renumber = new Map(baseSourcesInUse(base, replaced).map((n) => [n, sources.push(base.sources[n - 1])]));
-  const rest = mapCites(baseRest(base, replaced), (c) => ({ ...c, source: renumber.get(c.source as number) })) as ReturnType<typeof baseRest>;
-
-  return parseReport({
-    ...rest,
-    ...live,
+  return {
+    ...out,
     date,
     sources_retrieved: retrieved ? retrieved.slice(0, 10) : date,
-    scorecard: { ...rest.scorecard, ...scores },
+    ...(Object.keys(scores).length && { scorecard: scores }),
     sources,
-  });
+  };
+}
+
+/**
+ * Builds the report from every section. Found citations take their URL from
+ * the SourceStore, never from the model. Throws ReportError if the result
+ * breaks the report's limits.
+ */
+export function buildReport(drafts: Drafts, store: SourceStore, options: BuildOptions = {}): TeardownReport {
+  return parseReport(assemble(drafts, store, options));
+}
+
+/**
+ * Builds and validates the sections given, e.g. to check one section's draft
+ * against the page limits before the rest exist. Distribution needs Economics.
+ */
+export function buildPartialReport(drafts: Partial<Drafts>, store: SourceStore, options: BuildOptions = {}): PartialReport {
+  return parsePartialReport(assemble(drafts, store, options));
+}
+
+/** How many entries the sources page has for the drafts given. */
+export function sourcesUsed(drafts: Partial<Drafts>, store: SourceStore, options: BuildOptions = {}): number {
+  return buildPartialReport(drafts, store, options).sources.length;
 }

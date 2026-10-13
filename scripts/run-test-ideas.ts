@@ -1,12 +1,14 @@
-// Runs the pipeline (intake, research, the Existing Alternatives, Demand
-// Evidence and Economics sections, fact-check of each) on the three test ideas,
-// builds the partial report (live sections, the rest from the sample), and
-// writes everything to tests/runs/<timestamp>/. Billable: each idea costs real
-// API money.
+// Runs the full pipeline (intake, research, all nine sections, each
+// fact-checked, the verdict last) on the three test ideas and writes
+// everything to tests/runs/<timestamp>/. Billable: each idea costs real API
+// money.
 //
-// Test-only extra, costed separately from the pipeline: a second fact-check
-// pass on each checked section, with the same page cache (the "after" support
-// rate; --no-verify skips it).
+// Test-only extras, costed separately from the report:
+// - a second fact-check pass on each web-cited section, with the same page
+//   cache (the "after" support rate; --no-verify skips it);
+// - a contradiction audit: a stronger model than the checker reads the whole
+//   report and lists statements in one section that contradict another
+//   (--no-audit skips it).
 //
 //   npm run test:ideas            # also stores teardowns + sources in Neon when DATABASE_URL is set
 //   npm run test:ideas -- --no-db # API only
@@ -18,15 +20,19 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
 import { checkClaimList, collectClaims, supportRate, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageCache } from "../lib/engine/fetch";
 import type { IntakeInput } from "../lib/engine/input";
-import { ZERO_USAGE, costUsd, type StageRun, type TokenUsage } from "../lib/engine/llm";
+import { MODELS, addUsage, anthropic, assertFinished, costUsd, ZERO_USAGE, type StageRun } from "../lib/engine/llm";
 import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
-import { buildReport } from "../lib/engine/report";
-import { SECTION_NAMES } from "../lib/engine/sections/config";
-import { demandCheck, demandScore } from "../lib/engine/sections/demand";
-import { computeEconomics, economicsCheck, money } from "../lib/engine/sections/economics";
+import { blockersCheck } from "../lib/engine/sections/blockers";
+import { reportBrief } from "../lib/engine/sections/brief";
+import { demandCheck } from "../lib/engine/sections/demand";
+import { distributionCheck } from "../lib/engine/sections/distribution";
+import { economicsCheck } from "../lib/engine/sections/economics";
+import { laterContext } from "../lib/engine/sections/later";
 import { createTeardown, dbPageCache, runStages } from "../lib/engine/store";
 
 try {
@@ -87,6 +93,7 @@ const options: StageOptions = {
   factcheck: { model: flag("--factcheck-model") },
 };
 const verify = !process.argv.includes("--no-verify");
+const audit = !process.argv.includes("--no-audit");
 const ideas = only ? IDEAS.filter((i) => i.slug === only) : IDEAS;
 const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
 
@@ -140,22 +147,24 @@ async function main() {
     write("notes.md", `${r.notes}\n`);
     write("runs.json", r.runs);
     write("research-raw.json", `${JSON.stringify(r.responses, stripEncrypted, 2)}\n`);
-    for (const [name, file] of [["alternatives", "alternatives"], ["demand_evidence", "demand"], ["economics", "economics"]] as const) {
+    for (const name of ALL) {
       const sec = r[name];
-      write(`${file}-draft.json`, sec.draft);
-      write(`${file}.json`, sec.section);
-      write(`${file}-notes.md`, `${sec.notes}\n`);
-      write(`${file}-raw.json`, `${JSON.stringify(sec.responses, stripEncrypted, 2)}\n`);
-      write(`factcheck-${file}.json`, sec.factcheck.log);
+      write(`${name}-draft.json`, sec.draft);
+      write(`${name}.json`, sec.section);
+      if (sec.notes) write(`${name}-notes.md`, `${sec.notes}\n`);
+      if (sec.responses.length) write(`${name}-raw.json`, `${JSON.stringify(sec.responses, stripEncrypted, 2)}\n`);
+      write(`factcheck-${name}.json`, sec.factcheck.log);
     }
     write("writer-context.md", r.writerContext);
-    // Live sections; every other section from the sample.
-    write("report.json", buildReport(r.alternatives.section, r.sources, { demand: r.demand_evidence.section, economics: r.economics.section }));
+    write("report.json", r.report);
+    write("report.md", `${reportBrief(r.report)}\n`);
 
     const after = verify ? await verifyAll(r) : null;
     if (after) write("factcheck-verify.json", after.results);
+    const contradictions = audit ? await auditReport(r) : null;
+    if (contradictions) write("contradictions.json", contradictions);
     console.log(`✓ ${idea.slug}: ${r.sources.length} sources, $${r.runs.reduce((n, x) => n + x.cost_usd, 0).toFixed(4)}`);
-    return { ...r, after };
+    return { ...r, after, contradictions };
   }));
 
   const summary = ideas.map((idea, i) => {
@@ -165,48 +174,48 @@ async function main() {
     const find = (stage: string, step?: string) => r.runs.find((x) => x.stage === stage && x.step === step);
     const check = (section: string) => r.runs.find((x) => x.stage === "factcheck" && x.section === section);
     const usd = (run: StageRun | undefined | null) => round(run?.cost_usd ?? 0);
-    const rates = (name: "alternatives" | "demand_evidence" | "economics") => {
+    const sum = (runs: (StageRun | undefined | null)[]) => round(runs.reduce((n, x) => n + (x?.cost_usd ?? 0), 0));
+    const show = (x: ReturnType<typeof supportRate>) => (x.checked ? `${x.supported}/${x.checked}` : "0/0");
+    const rates = (name: Web) => {
       const f = r[name].factcheck;
       const after = r.after?.results[name];
-      const show = (x: ReturnType<typeof supportRate>) => (x.checked ? `${x.supported}/${x.checked}` : "0/0");
       return `${show(supportRate(f.excerptResults))} → ${show(supportRate(f.results))} → ${after ? show(supportRate(after)) : "–"}`;
     };
-    const all = (key: "excerptResults" | "results") => supportRate((["alternatives", "demand_evidence", "economics"] as const).flatMap((n) => r[n].factcheck[key]));
+    const all = (key: "excerptResults" | "results") => supportRate(WEB.flatMap((n) => r[n].factcheck[key]));
     const afterAll = r.after ? supportRate(Object.values(r.after.results).flat()) : null;
-    const actions = (a: string) => (["alternatives", "demand_evidence", "economics"] as const).flatMap((n) => r[n].factcheck.log).filter((l) => l.action === a).length;
+    const internal = supportRate(INTERNAL.flatMap((n) => r[n].factcheck.results));
+    const actions = (a: string) => ALL.flatMap((n) => r[n].factcheck.log).filter((l) => l.action === a).length;
     const key = keyCompetitors(idea, r);
-    const d = r.demand_evidence.section;
-    const ds = demandScore(d);
-    const e = r.economics.section;
-    const ec = computeEconomics(e);
+    const rep = r.report;
+    const sc = rep.scorecard;
     return {
       slug: idea.slug,
       teardown_id: r.id,
       searches: `${find("research")?.usage.web_search_requests ?? 0} + alt ${find("alternatives", "research")?.usage.web_search_requests ?? 0}`
         + ` + demand ${find("demand_evidence", "research")?.usage.web_search_requests ?? 0} + econ ${find("economics", "research")?.usage.web_search_requests ?? 0}`,
-      sources: r.sources.length,
-      intake_usd: usd(find("intake")),
-      research_usd: usd(find("research")),
-      section_research_usd: `alt ${usd(find("alternatives", "research"))}, demand ${usd(find("demand_evidence", "research"))}, econ ${usd(find("economics", "research"))}`,
-      writers_usd: `alt ${usd(find("alternatives", "write"))}, demand ${usd(find("demand_evidence", "write"))}, econ ${usd(find("economics", "write"))}`,
-      writer_cache: (["alternatives", "demand_evidence", "economics"] as const)
-        .map((n) => { const u = find(n, "write")?.usage; return `${n.split("_")[0]} w${u?.cache_creation_input_tokens ?? 0}/r${u?.cache_read_input_tokens ?? 0}`; }).join(", "),
-      writer_retries: (["alternatives", "demand_evidence", "economics"] as const).map((n) => find(n, "write")?.retries?.length ?? 0).join("/"),
-      factcheck_usd: `alt ${usd(check("alternatives"))}, demand ${usd(check("demand_evidence"))}, econ ${usd(check("economics"))}`,
+      sources: `${r.sources.length} in store, ${rep.sources.length} in report`,
       total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
-      projected_9_sections_usd: projectReport(r),
-      support_alt: rates("alternatives"),
-      support_demand: rates("demand_evidence"),
-      support_econ: rates("economics"),
-      support_all: `${pct(all("excerptResults").rate)} → ${pct(all("results").rate)} → ${afterAll ? `${pct(afterAll.rate)} (${afterAll.supported}/${afterAll.checked})` : "–"}`,
+      intake_research_usd: sum([find("intake"), find("research")]),
+      section_research_usd: sum(SEARCHING.map((n) => find(n, "research"))),
+      writers_usd: `searching ${sum(SEARCHING.map((n) => find(n, "write")))}, later ${sum(LATER.map((n) => find(n, "write")))}`
+        + ` (${LATER.map((n) => `${n.split("_")[0]} ${usd(find(n, "write"))}`).join(", ")})`,
+      factcheck_usd: sum(ALL.map((n) => check(n))),
+      writer_retries: ALL.map((n) => find(n, "write")?.retries?.length ?? 0).join("/"),
+      writer_cache: ALL.map((n) => { const u = find(n, "write")?.usage; return `${n.split("_")[0]} w${u?.cache_creation_input_tokens ?? 0}/r${u?.cache_read_input_tokens ?? 0}`; }).join(", "),
+      support_web: `${pct(all("excerptResults").rate)} → ${pct(all("results").rate)} (${show(all("results"))}) → ${afterAll ? `${pct(afterAll.rate)} (${show(afterAll)})` : "–"}`,
+      ...Object.fromEntries(WEB.map((n) => [`support_${n.split("_")[0]}`, rates(n)])),
+      internal_checks: `${show(internal)} supported (${INTERNAL.map((n) => `${n.split("_")[0]} ${show(supportRate(r[n].factcheck.results))}`).join(", ")})`,
       fixes: `rewritten ${actions("rewritten")}, estimated ${actions("estimated")}, dropped ${actions("dropped")}, unresolved ${actions("unresolved")}`,
       verify_usd: round(r.after?.cost_usd ?? 0),
       rows: `${r.alternatives.section.alternatives.length} of ${r.alternatives.draft.alternatives.length}`,
       key_in_section: key.in_section,
-      demand: `${d.evidence}, ${ds.rating}, ${ds.key_figure.value} ${ds.key_figure.unit}: ${ds.finding}`
-        + ` [${d.signals.map((s) => `${s.kind} ${s.value}`).join("; ") || "no signals"}; ${r.demand_evidence.draft.signals.length} drafted]`,
-      economics: `${e.scorecard.rating}, ${money(e.price.amount)} − ${money(e.unit_cost.amount)} = ${Math.round(ec.margin * 100)}% margin,`
-        + ` ${money(e.fixed_costs.amount)}/mo fixed, break-even ${ec.breakEven ?? "none"} ${e.break_even_unit} (${e.currency}): ${e.scorecard.finding}`,
+      verdict: `${rep.verdict.call.replace("_", " ")}, ${rep.verdict.confidence} confidence: ${rep.verdict.summary}`,
+      scorecard: (["alternatives", "demand_evidence", "economics", "distribution", "blockers"] as const)
+        .map((k) => `${k.split("_")[0]} ${sc[k].rating} ${sc[k].key_figure.value} ${sc[k].key_figure.unit}`).join("; "),
+      riskiest: `${r.riskiest_assumptions.section.assumptions[0].rests_on}: ${rep.riskiest_assumptions[0].statement}`,
+      first_test: `${rep.next_tests[0].name} ${rep.next_tests[0].cost}, ${rep.next_tests[0].time}; kill: ${rep.next_tests[0].kill_threshold}`,
+      contradictions: r.contradictions ? `${r.contradictions.contradictions.length}${r.contradictions.contradictions.map((c) => ` [${c.sections.join(" vs ")}: ${c.issue}]`).join("")}` : "–",
+      audit_usd: round(r.contradictions?.cost_usd ?? 0),
     };
   });
   mkdirSync(dir, { recursive: true });
@@ -219,46 +228,58 @@ async function main() {
 const round = (n: number) => Math.round(n * 1e4) / 1e4;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/** A fresh check of each fixed section, with the same pages. Test-only: graded by the same checker, so not independent. */
+const SEARCHING = ["alternatives", "demand_evidence", "economics"] as const;
+const LATER = ["idea", "distribution", "blockers", "riskiest_assumptions", "next_tests", "verdict"] as const;
+const ALL = [...SEARCHING, ...LATER];
+/** Sections whose claims cite web sources. */
+const WEB = ["alternatives", "demand_evidence", "economics", "distribution", "blockers"] as const;
+type Web = (typeof WEB)[number];
+/** Sections checked against the report itself or the founder's idea. */
+const INTERNAL = ["idea", "riskiest_assumptions", "verdict"] as const;
+
+/** A fresh check of each fixed web-cited section, with the same pages. Test-only: graded by the same checker, so not independent. */
 async function verifyAll(r: StagesResult & { pages: PageCache }) {
   const opts = { ...options.factcheck, pages: r.pages };
+  const ctx = laterContext(r.spec, r.sources, {
+    alternatives: r.alternatives.section, demand_evidence: r.demand_evidence.section, economics: r.economics.section,
+  }, r.writerContext);
   const runs = await Promise.all([
     checkClaimList(collectClaims(r.alternatives.section), r.sources, opts),
     checkClaimList(demandCheck(r.sources).claims(r.demand_evidence.section), r.sources, opts),
     checkClaimList(economicsCheck(r.sources).claims(r.economics.section), r.sources, opts),
+    checkClaimList(distributionCheck(ctx)(r.sources).claims(r.distribution.section), r.sources, opts),
+    checkClaimList(blockersCheck(ctx)(r.sources).claims(r.blockers.section), r.sources, opts),
   ]);
-  const results: Record<"alternatives" | "demand_evidence" | "economics", CheckResult[]> = {
-    alternatives: runs[0].results, demand_evidence: runs[1].results, economics: runs[2].results,
-  };
+  const results = Object.fromEntries(WEB.map((n, i) => [n, runs[i].results])) as Record<Web, CheckResult[]>;
   return { results, cost_usd: runs.reduce((n, x) => n + (x.run?.cost_usd ?? 0), 0) };
 }
 
-/**
- * Projected cost of a full 9-section report from this run's measurements.
- * - Intake, shared research, the three searching sections' research, their
- *   writers and their fact-checks: as measured. No other section searches
- *   (sections/config.ts), so the shared writer context is complete.
- * - Each of the 6 remaining writers reads the context from cache (the demand
- *   and economics writers' measured cache read, which started after the
- *   alternatives writer wrote it) and pays the measured writers' average own
- *   input and output, retries included. Verdict and page summaries also read
- *   the other sections' JSON, about 3k tokens each, uncached.
- * - Fact-check: the 3 measured fact-checks' average, for each remaining section.
- */
-function projectReport(r: StagesResult): number {
-  const writes = (["alternatives", "demand_evidence", "economics"] as const).map((n) => r.runs.find((x) => x.stage === n && x.step === "write")!);
-  const model = writes[0].model;
-  const price = (u: Partial<TokenUsage>) => costUsd(model, { ...ZERO_USAGE, ...u });
-  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  // One writer request's context: what the first writer wrote to cache (later reads include retries).
-  const read = writes[0].usage.cache_creation_input_tokens;
-  const own = avg(writes.map((w) => price({ input_tokens: w.usage.input_tokens, output_tokens: w.usage.output_tokens })));
-  const remaining = SECTION_NAMES.length - 3;
-  const writers = remaining * (price({ cache_read_input_tokens: read }) + own) + price({ input_tokens: 2 * 3000 });
-  const checks = r.runs.filter((x) => x.stage === "factcheck");
-  const factcheck = remaining * avg(checks.map((x) => x.cost_usd));
-  const measured = r.runs.reduce((t, x) => t + x.cost_usd, 0);
-  return round(measured + writers + factcheck);
+const AuditSchema = z.object({
+  contradictions: z.array(z.object({
+    sections: z.array(z.string()),
+    quotes: z.array(z.string()),
+    issue: z.string(),
+  })),
+});
+
+const AUDIT_PROMPT = `You audit a one-page market readout for internal consistency. You get every section of the report as text.
+
+List every contradiction between sections: two statements that cannot both be true, a figure stated differently in two places (a margin, a price, a cost ceiling, a count), a rating or verdict that the section's own content or another section's content contradicts, or a summary that says something the section it summarizes does not. Quote both statements word for word.
+
+Do not list: differences in emphasis, things one section mentions and another doesn't, judgements you would have made differently, or doubts about whether a figure is true in the world. Only conflicts inside the report. An empty list is a good answer when the report is consistent.`;
+
+/** Test-only: a stronger model than the checker lists contradictions between sections. */
+async function auditReport(r: StagesResult) {
+  const model = MODELS.opus;
+  const msg = await anthropic().messages.parse({
+    model,
+    max_tokens: 16000,
+    output_config: { effort: "high", format: zodOutputFormat(AuditSchema) },
+    system: AUDIT_PROMPT,
+    messages: [{ role: "user", content: reportBrief(r.report) }],
+  });
+  assertFinished(msg, "audit");
+  return { contradictions: msg.parsed_output?.contradictions ?? [], cost_usd: costUsd(model, addUsage(ZERO_USAGE, msg.usage)) };
 }
 
 // A table to paste into tests/runs-summary.md, which is committed (tests/runs/ is not).

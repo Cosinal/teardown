@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CheckClaim, Fixed, SectionCheck } from "../factcheck";
 import type { IdeaSpec } from "../intake";
 import { STAGE_MODELS, loadPrompt } from "../llm";
-import { buildReport, liveSourceBudgets } from "../report";
+import { SOURCE_BUDGETS, buildPartialReport } from "../report";
 import type { SourceStore } from "../research";
 import { PartSchema, type Part } from "./alternatives";
 import { runSectionResearch, runWriter, type SectionOptions } from "./common";
@@ -19,7 +19,7 @@ export const ECONOMICS_RESEARCH_PROMPT = "economics-research.v1";
 export const ECONOMICS_WRITE_PROMPT = "economics-write.v1";
 
 /** The method behind every computed figure. */
-export const ARITHMETIC_METHOD = "Arithmetic on the price, unit cost and fixed costs in this section";
+export const ARITHMETIC_METHOD = "Arithmetic on the price, unit cost and fixed costs in Economics";
 /** A cited figure its source didn't confirm keeps its place in the arithmetic, re-tagged with this method. */
 export const UNCONFIRMED_METHOD = "Benchmark figure its cited page did not confirm; treat as rough";
 
@@ -125,7 +125,7 @@ export function economicsReport(s: EconomicsSection) {
  * Checks the writer's JSON against the section rules. Throws with a message
  * that names the field, so the writer can be told what to fix.
  */
-export function parseEconomics(raw: unknown, store: SourceStore, maxSources = liveSourceBudgets().economics): EconomicsSection {
+export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SOURCE_BUDGETS.economics): EconomicsSection {
   const section = EconomicsSchema.parse(raw);
   const ids = new Set(store.map((s) => s.id));
   const cited = new Set<string>([`estimate:${ARITHMETIC_METHOD}`]);
@@ -165,7 +165,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = li
 /** Validates against the section rules and, through a report build, the page limits. */
 function parseForReport(raw: unknown, store: SourceStore, maxSources: number): EconomicsSection {
   const section = parseEconomics(raw, store, maxSources);
-  buildReport(null, store, { economics: section });
+  buildPartialReport({ economics: section }, store);
   return section;
 }
 
@@ -176,7 +176,7 @@ const numbers = (text: string) => (text.match(/\d[\d,.]*/g) ?? []).map((n) => n.
  * figure is never silently dropped: an unconfirmed one is re-tagged as a rough
  * estimate, and a rewrite may not change the numbers in a part.
  */
-export function economicsCheck(store: SourceStore, maxSources = liveSourceBudgets().economics): SectionCheck<EconomicsSection> {
+export function economicsCheck(store: SourceStore, maxSources = SOURCE_BUDGETS.economics): SectionCheck<EconomicsSection> {
   const locate = (id: string) => {
     const m = id.match(/^(price|unit_cost|fixed_costs)\.note\[(\d+)\]$/);
     if (!m) throw new Error(`unknown claim id ${id}`);
@@ -220,7 +220,7 @@ export function economicsCheck(store: SourceStore, maxSources = liveSourceBudget
 }
 
 /** The section's own instructions, after the shared writer context. */
-export function economicsPrompt(maxSources = liveSourceBudgets().economics): string {
+export function economicsPrompt(maxSources = SOURCE_BUDGETS.economics): string {
   // The arithmetic is always cited, so the writer's own share is one less.
   return loadPrompt(ECONOMICS_WRITE_PROMPT).replaceAll("{{own_sources}}", String(maxSources - 1));
 }
@@ -237,7 +237,7 @@ export function researchEconomics(spec: IdeaSpec, store: SourceStore, notes: str
 
 /** Writes the section from the shared writer context. `store` must be the store the context was built from. */
 export function writeEconomics(context: string, store: SourceStore, options: SectionOptions = {}) {
-  const maxSources = liveSourceBudgets().economics;
+  const maxSources = SOURCE_BUDGETS.economics;
   return runWriter("economics", {
     model: options.model ?? STAGE_MODELS.economics,
     context,

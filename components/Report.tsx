@@ -343,7 +343,7 @@ function BusinessPage({ r }: { r: TeardownReport }) {
                   <div className="td-cell-sub">{c.examples}</div>
                 </th>
                 <td><RatingBlocks rating={c.rating} /></td>
-                <td><Cited claim={c.reason} /></td>
+                <td><Text value={c.reason} /></td>
               </tr>
             ))}
           </tbody>

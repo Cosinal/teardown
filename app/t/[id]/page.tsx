@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import Report from "@/components/Report";
 import { init, sql } from "@/lib/db";
-import { SAMPLE_REPORT, parseReport, type TeardownReport } from "@/lib/engine";
+import { parseReport, type TeardownReport } from "@/lib/engine";
+import { SAMPLE_REPORT } from "@/lib/engine/fixtures/sample";
 import type { TeardownStatus } from "@/lib/engine/store";
 import "@/styles/report.css";
 

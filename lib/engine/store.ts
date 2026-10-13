@@ -8,9 +8,15 @@ import type { StageRun } from "./llm";
 import { runPipeline, type StageOptions, type StagesResult, type TeardownStatus } from "./pipeline";
 import { RESEARCH_PROMPT, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT } from "./sections/alternatives";
+import { ASSUMPTIONS_WRITE_PROMPT } from "./sections/assumptions";
+import { BLOCKERS_WRITE_PROMPT } from "./sections/blockers";
 import { WRITER_SHARED_PROMPT } from "./sections/common";
 import { DEMAND_RESEARCH_PROMPT, DEMAND_WRITE_PROMPT } from "./sections/demand";
+import { DISTRIBUTION_WRITE_PROMPT } from "./sections/distribution";
 import { ECONOMICS_RESEARCH_PROMPT, ECONOMICS_WRITE_PROMPT } from "./sections/economics";
+import { IDEA_WRITE_PROMPT } from "./sections/idea";
+import { TESTS_WRITE_PROMPT } from "./sections/tests";
+import { VERDICT_WRITE_PROMPT } from "./sections/verdict";
 
 export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
 
@@ -20,7 +26,8 @@ export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
 /** Stored in teardowns.prompt_version: every stage's prompt version in this pipeline. */
 export const PIPELINE_VERSION = [
   INTAKE_PROMPT, RESEARCH_PROMPT, ALTERNATIVES_RESEARCH_PROMPT, DEMAND_RESEARCH_PROMPT, ECONOMICS_RESEARCH_PROMPT, WRITER_SHARED_PROMPT,
-  ALTERNATIVES_WRITE_PROMPT, DEMAND_WRITE_PROMPT, ECONOMICS_WRITE_PROMPT, FACTCHECK_PROMPT, FACTCHECK_GAP_PROMPT,
+  ALTERNATIVES_WRITE_PROMPT, DEMAND_WRITE_PROMPT, ECONOMICS_WRITE_PROMPT, IDEA_WRITE_PROMPT, DISTRIBUTION_WRITE_PROMPT, BLOCKERS_WRITE_PROMPT,
+  ASSUMPTIONS_WRITE_PROMPT, TESTS_WRITE_PROMPT, VERDICT_WRITE_PROMPT, FACTCHECK_PROMPT, FACTCHECK_GAP_PROMPT,
 ].join("+");
 
 export function newTeardownId() {
@@ -89,7 +96,7 @@ export function dbPageCache(teardownId: string): PageCache {
 
 /**
  * Runs the pipeline for a queued teardown and records each step: statuses,
- * stage runs (fact-check's include the per-claim log), sources and sections. Billable: callers must gate this behind payment (see CLAUDE.md).
+ * stage runs (fact-check's include the per-claim log), sources, sections and the report. Billable: callers must gate this behind payment (see CLAUDE.md).
  */
 export async function runStages(id: string, options: StageOptions = {}): Promise<StagesResult> {
   await init();
@@ -113,6 +120,9 @@ export async function runStages(id: string, options: StageOptions = {}): Promise
       sources: (changed) => saveSources(id, changed),
       section: async (name, data) => {
         await sql()`UPDATE teardowns SET sections = sections || ${JSON.stringify({ [name]: data })}::jsonb WHERE id = ${id}`;
+      },
+      report: async (report) => {
+        await sql()`UPDATE teardowns SET report = ${JSON.stringify(report)}::jsonb, updated_at = now() WHERE id = ${id}`;
       },
     });
   } catch (err) {

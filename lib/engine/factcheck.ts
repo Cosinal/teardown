@@ -2,7 +2,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { fetchPage, memoryPageCache, normalizeForMatch, pageLoader, pageWindow, quoteInText, type PageCache, type PageResult } from "./fetch";
 import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, sumUsage, type ClaimCheck, type StageRun, type TokenUsage } from "./llm";
-import { isNotPublic, liveSourceBudget } from "./report";
+import { SOURCE_BUDGETS, isNotPublic } from "./report";
 import type { Source, SourceStore } from "./research";
 import { parseAlternatives, type AlternativesSection, type Part } from "./sections/alternatives";
 import { PRICE_NOT_PUBLIC } from "./types";
@@ -205,7 +205,7 @@ function fix(section: AlternativesSection, loc: Location, action: FixHow, r: Che
 }
 
 /** Fact-check's view of the Existing Alternatives section. */
-export function alternativesCheck(store: SourceStore, maxSources = liveSourceBudget()): SectionCheck<AlternativesSection> {
+export function alternativesCheck(store: SourceStore, maxSources = SOURCE_BUDGETS.alternatives): SectionCheck<AlternativesSection> {
   return {
     claims: collectClaims,
     fix(section, id, how, r) {
@@ -320,7 +320,7 @@ export function applyFactcheck(
   claims: CheckClaim[],
   results: CheckResult[],
   store: SourceStore,
-  maxSources = liveSourceBudget(),
+  maxSources = SOURCE_BUDGETS.alternatives,
 ): { section: AlternativesSection; log: ClaimCheck[] } {
   return applyChecks(alternativesCheck(store, maxSources), section, claims, results);
 }
