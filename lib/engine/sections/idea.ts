@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { Fixed, SectionCheck } from "../factcheck";
+import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
-import { SPEC_SOURCE, checkFigures, internalRewrite, internalSource, specText } from "./brief";
-import { runWriter, type SectionOptions } from "./common";
+import { SPEC_SOURCE, checkFigures, internalSource, specText } from "./brief";
+import { runWriter, type Revision, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
 
 // The Idea as Understood: the founder's idea restated in one line plus
@@ -42,16 +42,13 @@ export function ideaSource(ctx: LaterContext) {
   return internalSource(SPEC_SOURCE, "The founder's idea, as intake read it", specText(ctx.spec));
 }
 
-/** Fact-check's view: each field against the founder's idea. A field is reworded to fit it, never dropped. */
+/** Fact-check's view: each field judged against the founder's idea. */
 export function ideaCheck(ctx: LaterContext): () => SectionCheck<IdeaSection> {
   const label = { headline: "the idea in one line", customer: "who the customer is", problem: "the problem it solves", revenue: "how it makes money" };
   return () => ({
     claims: (s) => FIELDS.map((k) => ({ id: k, text: s[k], source: SPEC_SOURCE, context: `The idea as understood, ${label[k]}: a restatement of the founder's idea, which must not add to it. The source is the founder's idea as intake read it.` })),
-    fix(section, id, how, r): Fixed<IdeaSection> | null {
-      const text = internalRewrite(how, r);
-      if (!text) return null;
-      return { section: { ...section, [id]: text }, action: "rewritten", result: text };
-    },
+    // Judged only: the writer revises (see reviseFeedback in brief.ts).
+    fix: () => null,
     fallbacks: () => [],
     rank: (id) => [FIELDS.indexOf(id as (typeof FIELDS)[number])],
     row: () => undefined,
@@ -59,13 +56,14 @@ export function ideaCheck(ctx: LaterContext): () => SectionCheck<IdeaSection> {
   });
 }
 
-export function writeIdea(ctx: LaterContext, options: SectionOptions = {}) {
+export function writeIdea(ctx: LaterContext, options: SectionOptions = {}, revise?: Revision) {
   return runWriter("idea", {
     model: options.model ?? STAGE_MODELS.idea,
     context: ctx.context,
     finished: ctx.finished,
     sectionPrompt: loadPrompt(IDEA_WRITE_PROMPT),
     promptVersion: IDEA_WRITE_PROMPT,
+    revise,
     parse: (json) => parseIdea(json, ctx),
   });
 }

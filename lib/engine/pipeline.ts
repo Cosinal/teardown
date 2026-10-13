@@ -1,15 +1,15 @@
-import { factcheckSection, runFactcheck, type CheckOptions, type CheckResult, type FactcheckOutput } from "./factcheck";
+import { factcheckSection, runFactcheck, type CheckOptions, type CheckResult, type FactcheckOutput, type SectionCheck } from "./factcheck";
 import { memoryPageCache } from "./fetch";
 import type { IntakeInput } from "./input";
 import { runIntake, type IdeaSpec } from "./intake";
 import { STAGE_MODELS, type ClaimCheck, type StageRun } from "./llm";
 import { buildReport, type Drafts } from "./report";
-import { runResearch, type ResearchOptions, type SearchResponse, type SourceStore } from "./research";
+import { runResearch, type ResearchOptions, type SearchResponse, type Source, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, writeAlternatives, type AlternativesOptions, type AlternativesSection } from "./sections/alternatives";
 import { assumptionsCheck, reportSource, writeAssumptions, type AssumptionsSection } from "./sections/assumptions";
 import { blockersCheck, writeBlockers, type BlockersSection } from "./sections/blockers";
-import { factcheckInternal } from "./sections/brief";
-import { mergeResearch, searchSection, writerContext, type SectionOptions } from "./sections/common";
+import { factcheckInternal, reviseFeedback } from "./sections/brief";
+import { WriterError, mergeResearch, searchSection, writerContext, type Revision, type SectionOptions } from "./sections/common";
 import { SECTIONS } from "./sections/config";
 import { DEMAND_RESEARCH_PROMPT, demandCheck, writeDemand, type DemandSection } from "./sections/demand";
 import { distributionCheck, writeDistribution, type DistributionSection } from "./sections/distribution";
@@ -175,6 +175,35 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   const economics = await finish("economics", econWrite.value,
     await factcheckSection("economics", (s) => economicsCheck(s), econWrite.value, sources, fc), own.economics);
 
+  // Idea, Riskiest Assumptions and Verdict are checked against the founder's
+  // idea or the finished sections. The checker only judges; if it finds a
+  // claim it doesn't fully support, the writer revises once with its reasons,
+  // and the revision stands if the check supports at least as many claims.
+  const supported = (c: FactcheckOutput<unknown>) => c.log.filter((l) => l.verdict === "supported").length;
+  const internal = async <T>(
+    name: string, draft: T, write: (revise: Revision) => Promise<{ value: T; run: StageRun }>,
+    check: () => SectionCheck<T>, own: Source[],
+  ): Promise<SectionResult<T>> => {
+    const run = (section: T) => factcheckInternal(name, check, section, sources, own, fc);
+    let checked = await run(draft);
+    const feedback = reviseFeedback(checked.log);
+    if (feedback) {
+      try {
+        const revised = await write({ draft, feedback });
+        await record(revised.run);
+        const again = await run(revised.value);
+        const better = supported(again) >= supported(checked);
+        await record((better ? checked : again).run);
+        if (better) checked = again;
+      } catch (err) {
+        // The first draft stands; the failed revision's spend still counts.
+        if (!(err instanceof WriterError)) throw err;
+        await record(err.run);
+      }
+    }
+    return finish(name, draft, checked);
+  };
+
   // The sections with no research, in rounds. Each round's writers get the
   // same cached context plus the sections finished before it.
   const drafts: Partial<Drafts> = { alternatives: alternatives.section, demand_evidence: demand.section, economics: economics.section };
@@ -185,8 +214,8 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   const [ideaWrite, distWrite, blockWrite] = await Promise.all([writeIdea(ctx), writeDistribution(ctx), writeBlockers(ctx)]);
   for (const w of [ideaWrite, distWrite, blockWrite]) await record(w.run);
   await hooks.status?.("factcheck");
-  const idea = await finish("idea", ideaWrite.value,
-    await factcheckInternal("idea", ideaCheck(ctx), ideaWrite.value, sources, [ideaSource(ctx)], fc));
+  const round1 = ctx;
+  const idea = await internal("idea", ideaWrite.value, (r) => writeIdea(round1, {}, r), ideaCheck(round1), [ideaSource(round1)]);
   const distribution = await finish("distribution", distWrite.value,
     await factcheckSection("distribution", distributionCheck(ctx), distWrite.value, sources, fc));
   const blockers = await finish("blockers", blockWrite.value,
@@ -198,8 +227,9 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   const assumeWrite = await writeAssumptions(ctx);
   await record(assumeWrite.run);
   await hooks.status?.("factcheck");
-  const assumptions = await finish("riskiest_assumptions", assumeWrite.value,
-    await factcheckInternal("riskiest_assumptions", assumptionsCheck(ctx), assumeWrite.value, sources, [reportSource(ctx)], fc));
+  const round2 = ctx;
+  const assumptions = await internal("riskiest_assumptions", assumeWrite.value, (r) => writeAssumptions(round2, {}, r),
+    assumptionsCheck(round2), [reportSource(round2)]);
   drafts.riskiest_assumptions = assumptions.section;
 
   await hooks.status?.("writing");
@@ -214,8 +244,8 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   const verdictWrite = await writeVerdict(ctx);
   await record(verdictWrite.run);
   await hooks.status?.("factcheck");
-  const verdict = await finish("verdict", verdictWrite.value,
-    await factcheckInternal("verdict", verdictCheck(ctx), verdictWrite.value, sources, [reportSource(ctx)], fc));
+  const round4 = ctx;
+  const verdict = await internal("verdict", verdictWrite.value, (r) => writeVerdict(round4, {}, r), verdictCheck(round4), [reportSource(round4)]);
   drafts.verdict = verdict.section;
 
   const report = buildReport(drafts as Drafts, sources, ctx.build);

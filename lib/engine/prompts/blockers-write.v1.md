@@ -15,6 +15,8 @@ Reply with this JSON shape:
 
 `Part` is a cited text part as described above.
 
+Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+
 ## blockers
 
 - `type`: at most 12 characters, e.g. "Legal", "Licensing", "Technical", "Platform", "Insurance", "Data".

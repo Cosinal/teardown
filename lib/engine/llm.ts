@@ -63,8 +63,8 @@ export interface TokenUsage {
 /** One stage's run, recorded on the teardown row. */
 export interface StageRun {
   stage: Stage;
-  /** For a section: "research" (its own searches) or "write". */
-  step?: "research" | "write";
+  /** For a section: "research" (its own searches), "write", or "revise" (a rewrite after fact-check). */
+  step?: "research" | "write" | "revise";
   prompt_version: string;
   model: string;
   usage: TokenUsage;

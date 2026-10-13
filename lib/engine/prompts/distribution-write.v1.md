@@ -23,6 +23,8 @@ Reply with this JSON shape:
 
 `Part` is a cited text part as described above.
 
+Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+
 ## channels
 
 1 to 3 channels, best first: ones a first-time founder can actually run (communities, search, partnerships, referrals, direct outreach, ads, marketplaces) and that the sources and notes point to for this customer and geography.

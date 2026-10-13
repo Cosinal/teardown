@@ -15,9 +15,13 @@ Reply with this JSON shape:
 }
 ```
 
+Every field above is a plain string or number, not a cited part object.
+
+Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+
 1 to 3 tests. The first checks assumption 1, the riskiest; page 1 shows it.
 
-- `assumption`: the rank of the riskiest assumption this test checks.
+- `assumption`: the rank of the riskiest assumption this test checks. The test must check exactly what that assumption claims: the same customers, price, channel or cost. If assumption 3 is about winning customers through direct outreach, the test measures direct outreach, not another channel.
 - `name`: at most 24 characters, ending with a full stop, e.g. "Paid landing page."
 - `description`: what the founder does, at most 64 characters, e.g. "A one-page offer with a checkout. Reports written by hand."
 - `summary`: first test only (null for the others), at most 240 characters: the test pitched for page 1, saying who it reaches and why it is the cheapest way to check the riskiest assumption. It stands alone: no "see page", "above" or "below".

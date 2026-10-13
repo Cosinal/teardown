@@ -159,11 +159,9 @@ export function pointsElsewhere(text: string): boolean {
  * The per-section fact-check, for claims judged against the report's own
  * sections or the founder's input rather than a web page. The synthetic
  * sources exist only for the checker: the store that comes back is the one
- * given, with no page fetches. These checks only narrow: a claim the checker
- * calls partly supported takes its rewrite; one it calls unsupported is kept
- * and logged unresolved, since a rewrite from a misread of the report's own
- * text would add the contradiction the check exists to prevent (see
- * internalRewrite).
+ * given, with no page fetches. These checks only judge: their fixes never
+ * apply, because the checker's own rewrites of a summary introduced errors
+ * (tests/runs-summary.md). The writer revises instead (reviseFeedback).
  */
 export async function factcheckInternal<T>(
   name: string,
@@ -177,8 +175,16 @@ export async function factcheckInternal<T>(
   return { ...out, sources: store, changed: [] };
 }
 
-/** The rewrite an internal check may apply: only a narrowing of a partly supported claim. */
-export function internalRewrite(how: string, r: { verdict: string; text: string | null }): string | null {
-  const text = r.text?.trim();
-  return how === "rewrite" && r.verdict === "partial" && text ? text : null;
+/**
+ * What a writer is told when the internal check found claims it doesn't fully
+ * support, or null when every claim is supported.
+ */
+export function reviseFeedback(log: { id: string; text: string; verdict: string; reason: string }[]): string | null {
+  const problems = log.filter((l) => l.verdict !== "supported");
+  if (!problems.length) return null;
+  return [
+    "A fact-check of this draft against the finished sections found these problems:",
+    ...problems.map((p) => `- ${p.id} (${p.verdict}): "${p.text}" ${p.reason}`),
+    "Rewrite those fields so each says only what the finished sections say, keeping every rule above. Change nothing else, and reply with the whole JSON object again.",
+  ].join("\n");
 }

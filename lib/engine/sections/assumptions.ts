@@ -1,10 +1,10 @@
 import { z } from "zod";
-import type { Fixed, SectionCheck } from "../factcheck";
+import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import type { Assumption, Rating } from "../types";
 import { LIMITS } from "../validate";
-import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalRewrite, internalSource, pointsElsewhere } from "./brief";
-import { runWriter, type SectionOptions } from "./common";
+import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalSource, pointsElsewhere } from "./brief";
+import { runWriter, type Revision, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
 
 // Riskiest Assumptions: up to three things that must be true, riskiest first.
@@ -72,7 +72,7 @@ export function reportSource(ctx: LaterContext) {
   return internalSource(REPORT_SOURCE, "This report's finished sections", ctx.brief);
 }
 
-/** Fact-check's view: each evidence line against the finished sections. Reworded to fit them, never dropped. */
+/** Fact-check's view: each evidence line judged against the finished sections. */
 export function assumptionsCheck(ctx: LaterContext): () => SectionCheck<AssumptionsSection> {
   const index = (id: string) => Number(id.match(/^assumptions\[(\d+)\]\.evidence$/)![1]);
   return () => ({
@@ -82,13 +82,8 @@ export function assumptionsCheck(ctx: LaterContext): () => SectionCheck<Assumpti
       source: REPORT_SOURCE,
       context: `What the report's ${LABEL[a.rests_on]} section found, as the evidence behind riskiest assumption ${i + 1}: "${a.statement}". ${INTERNAL_NOTE}`,
     })),
-    fix(section, id, how, r): Fixed<AssumptionsSection> | null {
-      const text = internalRewrite(how, r);
-      if (!text) return null;
-      const s = structuredClone(section);
-      s.assumptions[index(id)].evidence = text;
-      return { section: s, action: "rewritten", result: text };
-    },
+    // Judged only: the writer revises (see reviseFeedback in brief.ts).
+    fix: () => null,
     fallbacks: () => [],
     rank: (id) => [index(id)],
     row: () => undefined,
@@ -104,13 +99,14 @@ export function assumptionsPrompt(ctx: LaterContext): string {
     .replaceAll("{{weakest}}", weakestSections(ctx).join(" or "));
 }
 
-export function writeAssumptions(ctx: LaterContext, options: SectionOptions = {}) {
+export function writeAssumptions(ctx: LaterContext, options: SectionOptions = {}, revise?: Revision) {
   return runWriter("riskiest_assumptions", {
     model: options.model ?? STAGE_MODELS.riskiest_assumptions,
     context: ctx.context,
     finished: ctx.finished,
     sectionPrompt: assumptionsPrompt(ctx),
     promptVersion: ASSUMPTIONS_WRITE_PROMPT,
+    revise,
     parse: (json) => parseAssumptions(json, ctx),
   });
 }

@@ -6,7 +6,7 @@ import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
 import { assumptionsCheck, parseAssumptions, weakestSections, type AssumptionsSection } from "../lib/engine/sections/assumptions";
 import { BLOCKER_COUNT_METHOD, blockersCheck, blockersReport, parseBlockers, type BlockersSection } from "../lib/engine/sections/blockers";
-import { REPORT_SOURCE, checkFigures, knownFigures, pointsElsewhere, reportBrief } from "../lib/engine/sections/brief";
+import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, knownFigures, pointsElsewhere, reportBrief, reviseFeedback } from "../lib/engine/sections/brief";
 import type { DemandSection } from "../lib/engine/sections/demand";
 import {
   PAYBACK_METHOD, cacCeiling, channelCap, distributionCheck, distributionReport, parseDistribution, type DistributionSection,
@@ -227,24 +227,21 @@ describe("riskiest assumptions", () => {
     expect(() => parseAssumptions(wrong, round2)).toThrow(/rests_on: .*demand_evidence or economics/);
   });
 
-  it("checks each evidence line against the report and rewords it to fit", () => {
+  it("judges each evidence line against the report but never applies the checker's rewrite", () => {
     const check = assumptionsCheck(round2)();
     const claims = check.claims(assumptions);
     expect(claims[0]).toMatchObject({ source: REPORT_SOURCE, text: assumptions.assumptions[0].evidence });
-    const { section } = applyChecks(check, assumptions, claims, [
+    expect(claims[0].context).toContain(INTERNAL_NOTE);
+    const { section, log } = applyChecks(check, assumptions, claims, [
       result(claims[0].id, "partial", "rewrite", "Demand Evidence found 94 reviews for one groomer."),
-      result(claims[1].id, "supported"),
+      result(claims[1].id, "unsupported", "rewrite", "The report found no reviews."),
     ]);
-    expect(section.assumptions[0].evidence).toBe("Demand Evidence found 94 reviews for one groomer.");
-    // Unsupported is kept and logged: a rewrite from a misread of the report's own text would add a contradiction.
-    const { section: same, log } = applyChecks(check, assumptions, claims, [
-      result(claims[0].id, "unsupported", "rewrite", "The report found no reviews."), result(claims[1].id, "supported"),
-    ]);
-    expect(same).toEqual(assumptions);
-    expect(log[0].action).toBe("unresolved");
-    // A rewrite that adds a figure the report doesn't give is refused.
-    const { section: kept } = applyChecks(check, assumptions, claims, [result(claims[0].id, "partial", "rewrite", "500 owners asked."), result(claims[1].id, "supported")]);
-    expect(kept).toEqual(assumptions);
+    expect(section).toEqual(assumptions);
+    expect(log.map((l) => l.action)).toEqual(["kept", "unresolved"]);
+    const feedback = reviseFeedback(log)!;
+    expect(feedback).toContain(`assumptions[1].evidence (unsupported): "${assumptions.assumptions[1].evidence}"`);
+    expect(feedback).toContain("assumptions[0].evidence (partial)");
+    expect(reviseFeedback([{ ...log[0], verdict: "supported" }])).toBeNull();
   });
 });
 
@@ -281,11 +278,7 @@ describe("verdict", () => {
     const check = verdictCheck(round4)();
     const claims = check.claims(verdict);
     expect(claims.map((c) => c.id)).toEqual(["summary", "market", "business", "next_steps"]);
-    const { section } = applyChecks(check, verdict, claims, [
-      result("summary", "supported"), result("market", "supported"),
-      result("business", "partial", "rewrite", "A 23% margin; ads cost more than a groom keeps."), result("next_steps", "supported"),
-    ]);
-    expect(section.page_summaries.business).toBe("A 23% margin; ads cost more than a groom keeps.");
+    expect(new Set(claims.map((c) => c.source))).toEqual(new Set([REPORT_SOURCE]));
   });
 
   it("builds the whole report from the nine sections, with no sample", () => {

@@ -1,17 +1,18 @@
 import { z } from "zod";
-import type { Fixed, SectionCheck } from "../factcheck";
+import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
 import { LEN } from "../validate";
-import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalRewrite, pointsElsewhere } from "./brief";
-import { runWriter, type SectionOptions } from "./common";
+import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, pointsElsewhere } from "./brief";
+import { runWriter, type Revision, type SectionOptions } from "./common";
 import { THIN } from "./demand";
 import type { LaterContext } from "./later";
 
 // Verdict: written last, from the other eight sections after their
 // fact-check, with the one-paragraph summaries at the top of pages 2 to 4. It
 // may only restate them: no figure the report doesn't already give, and each
-// summary is fact-checked against the finished sections. Page 1 must stand
+// summary is fact-checked against the finished sections, and revised by the
+// writer if the check finds a claim they don't fully support. Page 1 must stand
 // alone, so the summary can't point to other pages. The call is held to the
 // scorecard: no "pursue" on weak or thin evidence.
 
@@ -58,7 +59,7 @@ export function parseVerdict(raw: unknown, ctx: LaterContext): VerdictSection {
   return section;
 }
 
-/** Fact-check's view: the summary and each page summary against the other eight sections. Reworded to fit them, never dropped. */
+/** Fact-check's view: the summary and each page summary judged against the other eight sections. */
 export function verdictCheck(ctx: LaterContext): () => SectionCheck<VerdictSection> {
   const context: Record<Field, string> = {
     summary: "The verdict on page 1, which justifies the call and must only restate what the report's sections say",
@@ -68,14 +69,8 @@ export function verdictCheck(ctx: LaterContext): () => SectionCheck<VerdictSecti
   };
   return () => ({
     claims: (s) => FIELDS.map((k) => ({ id: k, text: get(s, k), source: REPORT_SOURCE, context: `${context[k]} (call: ${s.call.replace("_", " ")}). ${INTERNAL_NOTE}` })),
-    fix(section, id, how, r): Fixed<VerdictSection> | null {
-      const text = internalRewrite(how, r);
-      if (!text) return null;
-      const s = structuredClone(section);
-      if (id === "summary") s.summary = text;
-      else s.page_summaries[id as Exclude<Field, "summary">] = text;
-      return { section: s, action: "rewritten", result: text };
-    },
+    // Judged only: the writer revises (see reviseFeedback in brief.ts).
+    fix: () => null,
     fallbacks: () => [],
     rank: (id) => [FIELDS.indexOf(id as Field)],
     row: () => undefined,
@@ -92,13 +87,14 @@ export function verdictPrompt(ctx: LaterContext): string {
   return loadPrompt(VERDICT_WRITE_PROMPT).replaceAll("{{limits}}", limits || "Every call is open.");
 }
 
-export function writeVerdict(ctx: LaterContext, options: SectionOptions = {}) {
+export function writeVerdict(ctx: LaterContext, options: SectionOptions = {}, revise?: Revision) {
   return runWriter("verdict", {
     model: options.model ?? STAGE_MODELS.verdict,
     context: ctx.context,
     finished: ctx.finished,
     sectionPrompt: verdictPrompt(ctx),
     promptVersion: VERDICT_WRITE_PROMPT,
+    revise,
     parse: (json) => parseVerdict(json, ctx),
   });
 }

@@ -13,6 +13,10 @@ Reply with this JSON shape:
 }
 ```
 
+Every field above is a plain string or number, not a cited part object.
+
+Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+
 ## call
 
 - "pursue": the sections support building it now: real demand signals, workable economics, channels that pay for themselves, no serious blocker.

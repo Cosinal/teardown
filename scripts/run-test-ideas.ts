@@ -197,8 +197,9 @@ async function main() {
       total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
       intake_research_usd: sum([find("intake"), find("research")]),
       section_research_usd: sum(SEARCHING.map((n) => find(n, "research"))),
-      writers_usd: `searching ${sum(SEARCHING.map((n) => find(n, "write")))}, later ${sum(LATER.map((n) => find(n, "write")))}`
-        + ` (${LATER.map((n) => `${n.split("_")[0]} ${usd(find(n, "write"))}`).join(", ")})`,
+      writers_usd: `searching ${sum(SEARCHING.map((n) => find(n, "write")))}, later ${sum(LATER.flatMap((n) => [find(n, "write"), find(n, "revise")]))}`
+        + ` (${LATER.map((n) => `${n.split("_")[0]} ${round(usd(find(n, "write")) + usd(find(n, "revise")))}`).join(", ")})`,
+      revisions: LATER.filter((n) => find(n, "revise")).join(", ") || "none",
       factcheck_usd: sum(ALL.map((n) => check(n))),
       writer_retries: ALL.map((n) => find(n, "write")?.retries?.length ?? 0).join("/"),
       writer_cache: ALL.map((n) => { const u = find(n, "write")?.usage; return `${n.split("_")[0]} w${u?.cache_creation_input_tokens ?? 0}/r${u?.cache_read_input_tokens ?? 0}`; }).join(", "),

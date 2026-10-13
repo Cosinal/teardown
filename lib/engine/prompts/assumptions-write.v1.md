@@ -14,6 +14,10 @@ Reply with this JSON shape:
 }
 ```
 
+Every field above is a plain string or number, not a cited part object.
+
+Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+
 1 to 3 assumptions, ranked: the first is the riskiest.
 
 - `rests_on`: the section whose evidence the assumption depends on: "alternatives", "demand_evidence", "economics", "distribution" or "blockers". The first assumption must rest on a section with the weakest evidence ({{weakest}}). Thin demand evidence usually makes "people will pay for this" the riskiest assumption.
