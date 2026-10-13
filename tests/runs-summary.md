@@ -226,3 +226,39 @@ Run notes:
 - **Demand padding.** The first run listed "1 Trustpilot review" and "2 ratings" as signals. The prompt now rules out single-digit counts. a's 00-58-24 run still offered "5.2M members of r/Entrepreneur", a generic forum size rather than evidence for this idea. The verdict was still thin, but this kind of stretch is worth watching.
 - **Source budgets.** The report's 20-source page now has three live sections: alternatives 7, demand 4, economics 5, plus the 4 the sample's remaining sections cite. Alternatives' writer asked for 8–9 in most runs and was cut back on retry.
 - **Layout.** b's and c's reports were rendered locally. Page 3 (workings table plus the four unit figures) and page 2 with zero demand signals both fit their sheets.
+
+## 2026-10-13T21-05-18 — every section live (`idea`, `distribution`, `blockers`, `assumptions`, `tests`, `verdict` `-write.v1`), database on
+
+No section comes from the sample any more. After the three searching sections are written and fact-checked, the six with `searches: 0` are written from the same cached writer context plus a second cached block, the finished sections so far as text with every figure in them: Idea, Distribution and Blockers together, then Riskiest Assumptions, then Next Tests, then Verdict (with the three page summaries) last. Teardown rows `89Nzo5Yk5Kx0`, `xd_zLbC6o2Kd`, `prwgV0IKJPnq`; each now ends `done` with its report saved.
+
+| Idea | Full report | Later writers (incl. revisions) | Fact-check | Web claims supported: excerpt → pages → fresh re-check | Internal checks | Contradictions (between / within sections) |
+|---|---|---|---|---|---|---|
+| a-teardown | **$1.08** | $0.20 | $0.013 | 82% → 94% (16/17) → 88% (15/17) | 9/11 | 0 / 1 |
+| b-dog-grooming | **$1.14** | $0.18 | $0.014 | 50% → 56% (9/16) → 88% (14/16) | 10/11 | 0 / 0 |
+| c-nav-reconciliation | **$1.18** | $0.20 | $0.009 | 75% → 83% (10/12) → 100% (12/12) | 9/11 | 0 / 1 |
+
+Verdicts, all "test first, low confidence":
+
+- **a:** "Margins are high at $7.50 a report, but demand is weak and WorthBuild already sells at $5. Test whether founders pay before building."
+- **b:** "Mobile rivals already work Halifax and demand evidence is thin. The margin is thin too, so test whether owners pay $80 before building."
+- **c:** "Extraction tools are strong and the reconciliation niche looks open, but demand evidence is thin. First test: ask pension ops leads for a paid pilot."
+
+How the numbers are held together:
+
+- **Figures.** Idea, Assumptions, Tests (money only) and Verdict may use only figures that appear in the finished sections or the founder's input, written the same way; anything else fails validation and the writer is told the allowed list. Economics' unrounded break-even ("= 2.9, rounded up") is excluded: c's business summary said "about 2.9 customers" next to a verdict saying 3.
+- **Distribution vs Economics.** Each channel gives a rough cost to win a customer; code writes it next to the money one sale keeps (one-time) or the payback months (subscription, 12 months at most), and lowers the rating when a sale can't pay for it. The key figure, "max CAC", is computed from Economics: a $6.10, b $33, c $16.8K (12 × $1,400). The sample's "$1.98 ceiling" beside b's own economics can't happen now.
+- **Weakest evidence first.** The first assumption must rest on a lowest-rated scorecard row (demand in all three), and the first test must check it. Tests take 1–13 days and $0–500; code writes cost and time.
+- **Verdict.** "Pursue" is refused when any row is weak or demand is thin, "high" confidence when demand is thin, and the summary may not point to other pages.
+
+Fact-check:
+
+- **Web-cited claims** in Distribution and Blockers go through the same per-claim check as the other sections. "Support rate after fact-check" above counts only these (all five web-cited sections), as before.
+- **Internal checks.** Idea is judged against intake's reading of the founder's idea, each assumption's evidence line and the four summaries against the finished sections, with the same checker. In the first run the checker's own rewrites made things worse (c: "the report found no third-party price", when it does; c's market summary became "both serve managers"), so these checks now only judge. When a claim isn't fully supported, the writer revises once with the checker's reasons, and the revision stands if it checks at least as well. Revisions ran in a (idea, assumptions, verdict), b (assumptions) and c (assumptions, verdict).
+- **Contradictions** are counted by a test-only audit on Opus that reads the whole report (about $0.03, not in the totals), and by reading each report. Both agree: none between sections. Within sections: a's Existing Alternatives prices the WorthBuild/DimeADozen row at "$9 to $129" while its own market gap says WorthBuild charges $5. c's test 2 sets up 3 calls but its kill threshold counts "5 interested funds". The tests prompt already asks for the same sample; it happened in two runs of three.
+
+Earlier runs of the same branch:
+
+- **20-54-08** (first): $0.95 / $1.04 / $1.15, all complete. Found b's assumption saying "each groom loses money" when Economics keeps $32 a groom, and the two checker rewrites above. Fixed in the prompts and by judge-only internal checks.
+- **20-59-14**: a and b failed, both one character over a limit after two retries (a channel name at 35 of 34, a verdict at 161 of 160). Retries were common in every writer: the Idea writer always first answered with cited-part objects, because the shared rules say every text part is one. Writers now get three retries, and the six later prompts say their fields are plain strings and to aim under each limit. The final run had 0–2 retries per writer and no failures.
+
+Cost: the six later writers add $0.18–0.20 a report, revisions included, and their checks under a cent. The full report is $1.08–1.18, under the $1.50 target; Economics' unit-cost estimate for idea a ($1.40) is now close to that.
