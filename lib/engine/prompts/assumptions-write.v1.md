@@ -20,6 +20,6 @@ Reply with this JSON shape:
 - `evidence`: what that section found, restated from it, at most 200 characters, e.g. "Demand Evidence found one checkable signal: 94 Google reviews for one Halifax mobile groomer." It is fact-checked against the finished sections, so say only what they say.
 - `statement`: the assumption as a plain claim about customers, costs or channels, at most 90 characters, e.g. "Halifax dog owners will pay $80 for a groom at home."
 - `short`: the same assumption for page 1, at most 100 characters. It stands alone: no "see page", "above" or "below".
-- `if_false`: what happens to the business if it is false, at most 100 characters, e.g. "If false, there is no business: salons already serve these owners."
+- `if_false`: what happens to the business if it is false, at most 100 characters, e.g. "If false, there is no business: salons already serve these owners." It must agree with the finished sections: never say a sale loses money when Economics shows each sale keeps money.
 
 Every figure must come from the figures list, copied exactly. Each assumption must be something a founder can test in under two weeks; leave out what nobody can check (the economy, a competitor's plans).

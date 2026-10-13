@@ -3,7 +3,7 @@ import type { Fixed, SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
 import { LEN } from "../validate";
-import { REPORT_SOURCE, checkFigures, pointsElsewhere } from "./brief";
+import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalRewrite, pointsElsewhere } from "./brief";
 import { runWriter, type SectionOptions } from "./common";
 import { THIN } from "./demand";
 import type { LaterContext } from "./later";
@@ -67,10 +67,10 @@ export function verdictCheck(ctx: LaterContext): () => SectionCheck<VerdictSecti
     next_steps: "The summary at the top of the Next steps page (Blockers, Riskiest assumptions, Next tests), which must only restate those sections",
   };
   return () => ({
-    claims: (s) => FIELDS.map((k) => ({ id: k, text: get(s, k), source: REPORT_SOURCE, context: `${context[k]} (call: ${s.call.replace("_", " ")})` })),
+    claims: (s) => FIELDS.map((k) => ({ id: k, text: get(s, k), source: REPORT_SOURCE, context: `${context[k]} (call: ${s.call.replace("_", " ")}). ${INTERNAL_NOTE}` })),
     fix(section, id, how, r): Fixed<VerdictSection> | null {
-      const text = r.text?.trim();
-      if (how !== "rewrite" || !text) return null;
+      const text = internalRewrite(how, r);
+      if (!text) return null;
       const s = structuredClone(section);
       if (id === "summary") s.summary = text;
       else s.page_summaries[id as Exclude<Field, "summary">] = text;

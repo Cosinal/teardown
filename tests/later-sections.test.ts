@@ -109,6 +109,12 @@ describe("figures", () => {
     expect(() => checkFigures("A 25% margin.", known, "x")).toThrow(/"25%"/);
   });
 
+  it("leaves out Economics' unrounded break-even", () => {
+    const k = knownFigures("Break-even: 3 paying customers. $4,100 fixed costs a month ÷ $1,393 kept a sale = 2.9, rounded up");
+    expect(() => checkFigures("Break-even at about 2.9 customers.", k, "x")).toThrow(/"2.9"/);
+    expect(() => checkFigures("Break-even at 3 customers, $1,393 kept each.", k, "x")).not.toThrow();
+  });
+
   it("spots text that sends the reader elsewhere", () => {
     expect(pointsElsewhere("See page 3 for the margin.")).toBe(true);
     expect(pointsElsewhere("The test below checks it.")).toBe(true);
@@ -230,6 +236,12 @@ describe("riskiest assumptions", () => {
       result(claims[1].id, "supported"),
     ]);
     expect(section.assumptions[0].evidence).toBe("Demand Evidence found 94 reviews for one groomer.");
+    // Unsupported is kept and logged: a rewrite from a misread of the report's own text would add a contradiction.
+    const { section: same, log } = applyChecks(check, assumptions, claims, [
+      result(claims[0].id, "unsupported", "rewrite", "The report found no reviews."), result(claims[1].id, "supported"),
+    ]);
+    expect(same).toEqual(assumptions);
+    expect(log[0].action).toBe("unresolved");
     // A rewrite that adds a figure the report doesn't give is refused.
     const { section: kept } = applyChecks(check, assumptions, claims, [result(claims[0].id, "partial", "rewrite", "500 owners asked."), result(claims[1].id, "supported")]);
     expect(kept).toEqual(assumptions);

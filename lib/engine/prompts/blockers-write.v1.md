@@ -27,6 +27,6 @@ Reply with this JSON shape:
 ## scorecard
 
 - `rating`: "strong" when nothing serious stands in the way, "mixed" when there is real cost or delay, "weak" when something could stop the launch. Code shows the number of high-severity blockers as the key figure, and any high-severity blocker holds the section to "mixed" at best.
-- `finding`: one line, at most 56 characters, with no digits, e.g. "Nothing legal or technical prevents a launch."
+- `finding`: one line, at most 56 characters, with no digits, e.g. "Nothing legal or technical prevents a launch." It must fit every blocker you list: don't call them "only" one kind when another is listed.
 
 Cite at most {{max_sources}} sources and estimate methods the report doesn't already list, counting the key figure's count as one; reusing one the report already cites is free.

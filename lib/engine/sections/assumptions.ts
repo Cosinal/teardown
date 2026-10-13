@@ -3,7 +3,7 @@ import type { Fixed, SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import type { Assumption, Rating } from "../types";
 import { LIMITS } from "../validate";
-import { REPORT_SOURCE, checkFigures, internalSource, pointsElsewhere } from "./brief";
+import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalRewrite, internalSource, pointsElsewhere } from "./brief";
 import { runWriter, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
 
@@ -80,11 +80,11 @@ export function assumptionsCheck(ctx: LaterContext): () => SectionCheck<Assumpti
       id: `assumptions[${i}].evidence`,
       text: a.evidence,
       source: REPORT_SOURCE,
-      context: `What the report's ${LABEL[a.rests_on]} section found, as the evidence behind riskiest assumption ${i + 1}: "${a.statement}"`,
+      context: `What the report's ${LABEL[a.rests_on]} section found, as the evidence behind riskiest assumption ${i + 1}: "${a.statement}". ${INTERNAL_NOTE}`,
     })),
     fix(section, id, how, r): Fixed<AssumptionsSection> | null {
-      const text = r.text?.trim();
-      if (how !== "rewrite" || !text) return null;
+      const text = internalRewrite(how, r);
+      if (!text) return null;
       const s = structuredClone(section);
       s.assumptions[index(id)].evidence = text;
       return { section: s, action: "rewritten", result: text };

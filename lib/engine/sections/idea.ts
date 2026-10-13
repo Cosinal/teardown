@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Fixed, SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
-import { SPEC_SOURCE, checkFigures, internalSource, specText } from "./brief";
+import { SPEC_SOURCE, checkFigures, internalRewrite, internalSource, specText } from "./brief";
 import { runWriter, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
 
@@ -46,10 +46,10 @@ export function ideaSource(ctx: LaterContext) {
 export function ideaCheck(ctx: LaterContext): () => SectionCheck<IdeaSection> {
   const label = { headline: "the idea in one line", customer: "who the customer is", problem: "the problem it solves", revenue: "how it makes money" };
   return () => ({
-    claims: (s) => FIELDS.map((k) => ({ id: k, text: s[k], source: SPEC_SOURCE, context: `The idea as understood, ${label[k]}: a restatement of the founder's idea, which must not add to it` })),
+    claims: (s) => FIELDS.map((k) => ({ id: k, text: s[k], source: SPEC_SOURCE, context: `The idea as understood, ${label[k]}: a restatement of the founder's idea, which must not add to it. The source is the founder's idea as intake read it.` })),
     fix(section, id, how, r): Fixed<IdeaSection> | null {
-      const text = r.text?.trim();
-      if (how !== "rewrite" || !text) return null;
+      const text = internalRewrite(how, r);
+      if (!text) return null;
       return { section: { ...section, [id]: text }, action: "rewritten", result: text };
     },
     fallbacks: () => [],

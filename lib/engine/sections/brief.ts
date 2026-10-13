@@ -83,6 +83,13 @@ export function specText(spec: IdeaSpec): string {
   ].join("\n");
 }
 
+/**
+ * Added to every internal claim's context. Without it the checker treats the
+ * report like a web page and calls a figure the report attributes to one of
+ * its sources unsupported ("no third-party source here").
+ */
+export const INTERNAL_NOTE = "The source is this report's own text: anything it states, including what it attributes to its sources, counts as stated.";
+
 /** A synthetic source for the internal fact-check. */
 export function internalSource(id: string, title: string, excerpt: string): Source {
   return { id, url: `https://teardown.invalid/${id.toLowerCase()}`, title, retrieved_at: new Date(0).toISOString(), excerpt };
@@ -116,10 +123,13 @@ export interface KnownFigures {
   shown: string[];
 }
 
+/** Economics' unrounded break-even ("= 2.9, rounded up") is a working, not a figure to repeat: the result is the rounded one. */
+const UNROUNDED = /= [\d.,]+, rounded up/g;
+
 export function knownFigures(...texts: string[]): KnownFigures {
   const values = new Set<string>();
   const shown = new Set<string>();
-  for (const t of texts) {
+  for (const t of texts.map((x) => x.replace(UNROUNDED, ""))) {
     for (const f of figuresIn(t)) {
       f.values.forEach((v) => values.add(v));
       if (!f.free) shown.add(f.raw);
@@ -149,7 +159,11 @@ export function pointsElsewhere(text: string): boolean {
  * The per-section fact-check, for claims judged against the report's own
  * sections or the founder's input rather than a web page. The synthetic
  * sources exist only for the checker: the store that comes back is the one
- * given, with no page fetches.
+ * given, with no page fetches. These checks only narrow: a claim the checker
+ * calls partly supported takes its rewrite; one it calls unsupported is kept
+ * and logged unresolved, since a rewrite from a misread of the report's own
+ * text would add the contradiction the check exists to prevent (see
+ * internalRewrite).
  */
 export async function factcheckInternal<T>(
   name: string,
@@ -161,4 +175,10 @@ export async function factcheckInternal<T>(
 ): Promise<FactcheckOutput<T>> {
   const out = await factcheckSection(name, makeCheck, section, [...store, ...internal], { ...options, fetch: false });
   return { ...out, sources: store, changed: [] };
+}
+
+/** The rewrite an internal check may apply: only a narrowing of a partly supported claim. */
+export function internalRewrite(how: string, r: { verdict: string; text: string | null }): string | null {
+  const text = r.text?.trim();
+  return how === "rewrite" && r.verdict === "partial" && text ? text : null;
 }

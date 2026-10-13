@@ -214,7 +214,7 @@ async function main() {
         .map((k) => `${k.split("_")[0]} ${sc[k].rating} ${sc[k].key_figure.value} ${sc[k].key_figure.unit}`).join("; "),
       riskiest: `${r.riskiest_assumptions.section.assumptions[0].rests_on}: ${rep.riskiest_assumptions[0].statement}`,
       first_test: `${rep.next_tests[0].name} ${rep.next_tests[0].cost}, ${rep.next_tests[0].time}; kill: ${rep.next_tests[0].kill_threshold}`,
-      contradictions: r.contradictions ? `${r.contradictions.contradictions.length}${r.contradictions.contradictions.map((c) => ` [${c.sections.join(" vs ")}: ${c.issue}]`).join("")}` : "–",
+      contradictions: r.contradictions ? contradictionSummary(r.contradictions.contradictions) : "–",
       audit_usd: round(r.contradictions?.cost_usd ?? 0),
     };
   });
@@ -267,6 +267,12 @@ const AUDIT_PROMPT = `You audit a one-page market readout for internal consisten
 List every contradiction between sections: two statements that cannot both be true, a figure stated differently in two places (a margin, a price, a cost ceiling, a count), a rating or verdict that the section's own content or another section's content contradicts, or a summary that says something the section it summarizes does not. Quote both statements word for word.
 
 Do not list: differences in emphasis, things one section mentions and another doesn't, judgements you would have made differently, or doubts about whether a figure is true in the world. Only conflicts inside the report. An empty list is a good answer when the report is consistent.`;
+
+/** "between 0, within 1 [Blockers: …]": a contradiction is between sections when it names two or more. */
+function contradictionSummary(list: z.infer<typeof AuditSchema>["contradictions"]) {
+  const between = list.filter((c) => new Set(c.sections).size > 1).length;
+  return `between ${between}, within ${list.length - between}${list.map((c) => ` [${[...new Set(c.sections)].join(" vs ")}: ${c.issue}]`).join("")}`;
+}
 
 /** Test-only: a stronger model than the checker lists contradictions between sections. */
 async function auditReport(r: StagesResult) {
