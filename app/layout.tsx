@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // No global CSS here: the home page and the legal pages each import their own
 // stylesheet (styles/home.css, styles/legal.css), ported verbatim from the
@@ -7,7 +8,10 @@ import type { ReactNode } from "react";
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
