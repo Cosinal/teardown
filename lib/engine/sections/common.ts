@@ -22,11 +22,12 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
 const WRITER_EFFORT = "medium";
 /**
  * Writer calls allowed per section: the first, plus retries that are told what
- * failed. Two retries: writers miss character limits often enough that one
- * retry lost whole teardowns (tests/runs-summary.md), and a retry only re-reads
- * the cached context.
+ * failed. Three retries: writers miss character limits often enough that one
+ * retry lost whole teardowns, and with nine writers per report two still lost
+ * two of three test runs on a one-character overrun (tests/runs-summary.md).
+ * A retry only re-reads the cached context.
  */
-const WRITE_ATTEMPTS = 3;
+const WRITE_ATTEMPTS = 4;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -149,9 +150,13 @@ export function writerContext(spec: IdeaSpec, store: SourceStore, notes: { label
   ].join("\n\n");
 }
 
-/** One writer request: the shared context (cached), then the section's own instructions. */
+/**
+ * One writer request: the shared context (cached), then, for sections written
+ * from the others, the finished sections so far (cached too: a round's writers
+ * and their retries share it), then the section's own instructions.
+ */
 export function writerParams(
-  { model, context, sectionPrompt }: { model: string; context: string; sectionPrompt: string },
+  { model, context, finished, sectionPrompt }: { model: string; context: string; finished?: string; sectionPrompt: string },
   messages: Anthropic.MessageParam[],
   maxTokens = 16000,
 ): Anthropic.MessageCreateParamsNonStreaming {
@@ -161,6 +166,7 @@ export function writerParams(
     output_config: { effort: WRITER_EFFORT },
     system: [
       { type: "text", text: context, cache_control: { type: "ephemeral" } },
+      ...(finished ? [{ type: "text" as const, text: finished, cache_control: { type: "ephemeral" as const } }] : []),
       { type: "text", text: sectionPrompt },
     ],
     messages,
@@ -181,23 +187,39 @@ export function parseJsonText(text: string): unknown {
 
 export const WRITE_INSTRUCTION = "Write the section now. Reply with the JSON object only.";
 
+/** A writer that never produced valid JSON, with what its calls cost. */
+export class WriterError extends Error {
+  constructor(message: string, readonly run: StageRun) {
+    super(message);
+  }
+}
+
+/** An earlier draft and what fact-check found wrong with it. */
+export interface Revision {
+  draft: unknown;
+  feedback: string;
+}
+
 /**
  * Calls a section writer and validates its JSON with `parse`. On a validation
- * error it retries once, telling the writer what failed.
+ * error it retries (up to WRITE_ATTEMPTS calls in all), telling the writer what failed.
  */
 export async function runWriter<T>(
   stage: Stage,
-  { model, context, sectionPrompt, promptVersion, parse }: {
-    model: string; context: string; sectionPrompt: string; promptVersion: string; parse: (json: unknown) => T;
+  { model, context, finished, sectionPrompt, promptVersion, parse, revise }: {
+    model: string; context: string; finished?: string; sectionPrompt: string; promptVersion: string; parse: (json: unknown) => T;
+    /** Revise an earlier draft: the writer sees it and what fact-check found. */
+    revise?: Revision;
   },
 ): Promise<{ value: T; run: StageRun }> {
   const started = new Date();
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: WRITE_INSTRUCTION }];
+  if (revise) messages.push({ role: "assistant", content: JSON.stringify(revise.draft) }, { role: "user", content: revise.feedback });
   let usage = ZERO_USAGE;
   let modelId = model;
   const retries: string[] = [];
   for (let attempt = 1; ; attempt++) {
-    const msg = await anthropic().messages.create(writerParams({ model, context, sectionPrompt }, messages));
+    const msg = await anthropic().messages.create(writerParams({ model, context, finished, sectionPrompt }, messages));
     usage = addUsage(usage, msg.usage);
     modelId = msg.model;
     assertFinished(msg, stage);
@@ -207,14 +229,20 @@ export async function runWriter<T>(
       return {
         value,
         run: {
-          stage, step: "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
+          stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
           cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
           ...(retries.length && { retries }),
         },
       };
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err);
-      if (attempt >= WRITE_ATTEMPTS) throw new Error(`${stage}: writer output invalid: ${problem}`);
+      if (attempt >= WRITE_ATTEMPTS) {
+        // The spend is real even though the section failed; callers that recover from this can record it.
+        throw new WriterError(`${stage}: writer output invalid: ${problem}`, {
+          stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
+          cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(), retries: [...retries, problem.slice(0, 500)],
+        });
+      }
       retries.push(problem.slice(0, 500));
       messages.push(
         { role: "assistant", content: text || "(empty reply)" },

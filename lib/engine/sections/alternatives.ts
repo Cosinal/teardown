@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { IdeaSpec } from "../intake";
 import { STAGE_MODELS, loadPrompt } from "../llm";
-import { buildReport, isNotPublic, liveSourceBudget } from "../report";
+import { SOURCE_BUDGETS, buildPartialReport, isNotPublic } from "../report";
 import type { SourceStore } from "../research";
 import { PRICE_NOT_PUBLIC } from "../types";
 import { runSectionResearch, runWriter } from "./common";
@@ -18,7 +18,7 @@ export const ALTERNATIVES_WRITE_PROMPT = "alternatives-write.v3";
 export const PartSchema = z.object({ text: z.string(), source: z.string().nullable(), estimate: z.string().nullable() });
 export type Part = z.infer<typeof PartSchema>;
 
-// Lengths are left to buildReport, which applies the report's own limits.
+// Lengths are left to buildPartialReport, which applies the report's own limits.
 export const AlternativesSchema = z.object({
   alternatives: z.array(z.object({
     name: z.string(),
@@ -48,7 +48,7 @@ const ESTIMATE_MAX = 90;
  * and normalises "Not public" prices. Throws with a message that names the
  * field, so the writer can be told what to fix.
  */
-export function parseAlternatives(raw: unknown, store: SourceStore, maxSources = liveSourceBudget()): AlternativesSection {
+export function parseAlternatives(raw: unknown, store: SourceStore, maxSources = SOURCE_BUDGETS.alternatives): AlternativesSection {
   const section = AlternativesSchema.parse(raw);
   const ids = new Set(store.map((s) => s.id));
   const cited = new Set<string>();
@@ -82,12 +82,12 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
   if (section.alternatives.filter((a) => a.workaround).length > 1) throw new Error("alternatives: at most one workaround row");
   if (cited.size > maxSources) throw new Error(`cites ${cited.size} distinct sources and estimate methods; the limit is ${maxSources}`);
   // Applies the report's own lengths and counts.
-  buildReport(section, store);
+  buildPartialReport({ alternatives: section }, store);
   return section;
 }
 
 /** The section's own instructions, after the shared writer context. */
-export function alternativesPrompt(maxSources = liveSourceBudget()): string {
+export function alternativesPrompt(maxSources = SOURCE_BUDGETS.alternatives): string {
   return loadPrompt(ALTERNATIVES_WRITE_PROMPT).replaceAll("{{max_sources}}", String(maxSources));
 }
 
@@ -108,7 +108,7 @@ export function researchAlternatives(spec: IdeaSpec, store: SourceStore, notes: 
 
 /** Writes the section from the shared writer context. `store` must be the store the context was built from. */
 export function writeAlternatives(context: string, store: SourceStore, options: AlternativesOptions = {}) {
-  const maxSources = liveSourceBudget();
+  const maxSources = SOURCE_BUDGETS.alternatives;
   return runWriter("alternatives", {
     model: options.model ?? STAGE_MODELS.alternatives,
     context,

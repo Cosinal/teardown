@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import real from "./fixtures/research-response.json";
-import { SAMPLE_REPORT, buildReport, liveSourceBudget } from "../lib/engine/report";
+import { SOURCE_BUDGETS, buildPartialReport } from "../lib/engine/report";
 import type { IdeaSpec } from "../lib/engine/intake";
 import type { SourceStore } from "../lib/engine/research";
 import { parseAlternatives, researchAlternatives, writeAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
-import { mergeSources, parseJsonText, runSectionResearch, writerContext, writerParams } from "../lib/engine/sections/common";
+import { WriterError, mergeSources, parseJsonText, runSectionResearch, runWriter, writerContext, writerParams } from "../lib/engine/sections/common";
 
 const create = vi.fn();
 vi.mock("../lib/engine/llm", async (importOriginal) => ({
@@ -68,8 +68,8 @@ describe("mergeSources", () => {
   });
 });
 
-describe("buildReport", () => {
-  const report = buildReport(section, store, { date: "2026-10-12" });
+describe("buildPartialReport", () => {
+  const report = buildPartialReport({ alternatives: section }, store, { date: "2026-10-12" });
 
   it("numbers the cited sources in order of use, with URLs from the store", () => {
     expect(report.sources.slice(0, 3)).toEqual([
@@ -77,32 +77,30 @@ describe("buildReport", () => {
       { basis: "estimated", text: "Estimate. Analyst time per statement, from sample statements" },
       { basis: "found", text: "Page S1", url: "https://a.com/pricing" },
     ]);
-    expect(report.alternatives[0].price).toEqual({ text: "Quote only", basis: "found", source: 1 });
-    expect(report.alternatives[1]).toMatchObject({ workaround: true, price: { basis: "estimated", source: 2 } });
-    expect(report.alternatives[1]).not.toHaveProperty("examples");
-    expect(report.scorecard.alternatives).toMatchObject({ rating: "mixed", basis: "found", source: 3 });
+    expect(report.alternatives![0].price).toEqual({ text: "Quote only", basis: "found", source: 1 });
+    expect(report.alternatives![1]).toMatchObject({ workaround: true, price: { basis: "estimated", source: 2 } });
+    expect(report.alternatives![1]).not.toHaveProperty("examples");
+    expect(report.scorecard!.alternatives).toMatchObject({ rating: "mixed", basis: "found", source: 3 });
     expect(report.market_gap).toEqual([{ text: "Platforms are sold whole.", basis: "found", source: 1 }, "A single-task tool is open."]);
   });
 
-  it("keeps the sample's other sections, pointing at the same sources after renumbering", () => {
-    const d = report.demand_evidence[0].detail;
-    const s = SAMPLE_REPORT.demand_evidence[0].detail;
-    expect(report.sources[d.source - 1]).toEqual(SAMPLE_REPORT.sources[s.source - 1]);
-    // The sample's other sections cite 10 of its 14 sources.
-    expect(report.sources).toHaveLength(3 + 10);
+  it("has only the sections given, and dates the sources", () => {
+    expect(report.sources).toHaveLength(3);
+    expect(report.demand_evidence).toBeUndefined();
+    expect(report.verdict).toBeUndefined();
     expect(report.date).toBe("2026-10-12");
     expect(report.sources_retrieved).toBe("2026-10-11");
   });
 
   it("renders an uncited \"Not public\" price as plain text", () => {
     const np = { ...section, alternatives: [{ ...section.alternatives[0], price: plain("Not public") }, section.alternatives[1]] };
-    expect(buildReport(np, store).alternatives[0].price).toBe("Not public");
+    expect(buildPartialReport({ alternatives: np }, store).alternatives![0].price).toBe("Not public");
   });
 
   it("rejects an unknown id and an uncited price", () => {
-    expect(() => buildReport({ ...section, scorecard: { ...section.scorecard, source: "S9" } }, store)).toThrow(/unknown source id S9/);
+    expect(() => buildPartialReport({ alternatives: { ...section, scorecard: { ...section.scorecard, source: "S9" } } }, store)).toThrow(/unknown source id S9/);
     const uncited = { ...section, alternatives: [{ ...section.alternatives[0], price: plain("Quote only") }] };
-    expect(() => buildReport(uncited, store)).toThrow(/alternatives\[0\]\.price: needs a source/);
+    expect(() => buildPartialReport({ alternatives: uncited }, store)).toThrow(/alternatives\[0\]\.price: needs a source/);
   });
 });
 
@@ -215,7 +213,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(create).toHaveBeenCalledTimes(2);
     const first = create.mock.calls[0][0];
     expect(first.system[0]).toEqual({ type: "text", text: context, cache_control: { type: "ephemeral" } });
-    expect(first.system[1].text).toContain(`at most ${liveSourceBudget()} distinct`);
+    expect(first.system[1].text).toContain(`at most ${SOURCE_BUDGETS.alternatives} distinct`);
     expect(first).not.toHaveProperty("output_config.format");
     const retry = create.mock.calls[1][0].messages;
     expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: longer than 56/);
@@ -223,9 +221,29 @@ describe("section stages (Anthropic mocked)", () => {
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 
-  it("gives up after two retries", async () => {
+  it("gives up after three retries, keeping what the calls cost", async () => {
     create.mockResolvedValue(reply("I could not find enough sources."));
-    await expect(writeAlternatives("ctx", store)).rejects.toThrow(/alternatives: writer output invalid: no JSON object/);
-    expect(create).toHaveBeenCalledTimes(3);
+    const err = await writeAlternatives("ctx", store).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WriterError);
+    expect((err as WriterError).message).toMatch(/alternatives: writer output invalid: no JSON object/);
+    expect((err as WriterError).run).toMatchObject({ stage: "alternatives", step: "write", usage: { input_tokens: 4000 } });
+    expect((err as WriterError).run.retries).toHaveLength(4);
+    expect(create).toHaveBeenCalledTimes(4);
+  });
+
+  it("revises an earlier draft with fact-check's feedback", async () => {
+    create.mockResolvedValue(reply(JSON.stringify({ ok: true })));
+    const r = await runWriter("verdict", {
+      model: "claude-sonnet-5-5", context: "ctx", finished: "FINISHED", sectionPrompt: "prompt", promptVersion: "verdict-write.v1",
+      parse: (json) => json, revise: { draft: { ok: false }, feedback: "summary (partial): fix it" },
+    });
+    const call = create.mock.calls[0][0];
+    expect(call.system.map((b: { text: string }) => b.text)).toEqual(["ctx", "FINISHED", "prompt"]);
+    expect(call.system[1].cache_control).toEqual({ type: "ephemeral" });
+    expect(call.messages.slice(1)).toEqual([
+      { role: "assistant", content: JSON.stringify({ ok: false }) },
+      { role: "user", content: "summary (partial): fix it" },
+    ]);
+    expect(r.run.step).toBe("revise");
   });
 });

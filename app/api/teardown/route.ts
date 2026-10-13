@@ -1,4 +1,4 @@
-import { SAMPLE_REPORT } from "@/lib/engine";
+import { SAMPLE_REPORT } from "@/lib/engine/fixtures/sample";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

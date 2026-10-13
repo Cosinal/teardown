@@ -21,7 +21,7 @@ export const LIMITS = {
 
 // Max characters per kind of text. Big-number fields are nowrap, so they
 // overflow sideways rather than wrapping.
-const LEN = { big: 6, tag: 14, label: 32, line: 100, sentence: 160, para: 240, long: 400 } as const;
+export const LEN = { big: 6, tag: 14, label: 32, line: 100, sentence: 160, para: 240, long: 400 } as const;
 
 export class ReportError extends Error {}
 
@@ -61,8 +61,30 @@ const BASES = ["found", "estimated"] as const;
 const LEVELS = ["low", "medium", "high"] as const;
 const RATINGS = ["strong", "mixed", "weak"] as const;
 
+/** A report with only some of its sections, e.g. while the engine is still writing. Sources are always present. */
+export type PartialReport = Partial<Omit<TeardownReport, "scorecard" | "sources">> & {
+  scorecard?: Partial<TeardownReport["scorecard"]>;
+  sources: Source[];
+};
+
+const SCORE_KEYS = ["alternatives", "demand_evidence", "economics", "distribution", "blockers"] as const;
+
+/** Validates a whole report against the page limits. */
 export function parseReport(input: unknown): TeardownReport {
+  return parseFields(input, true) as TeardownReport;
+}
+
+/**
+ * Validates the sections a partial report has, with the same limits as a whole
+ * report. Sections it leaves out are not checked; sources are required.
+ */
+export function parsePartialReport(input: unknown): PartialReport {
+  return parseFields(input, false);
+}
+
+function parseFields(input: unknown, complete: boolean): PartialReport {
   const r = obj(input, "report");
+  const has = (o: Obj, k: string) => complete || o[k] !== undefined;
 
   // Sources first, so every citation can be checked against them.
   const sources = list<Source>(r.sources, "sources", 1, LIMITS.sources, (x, p) => {
@@ -116,73 +138,11 @@ export function parseReport(input: unknown): TeardownReport {
     return { value: str(o.value, `${p}.value`, valueMax), label: str(o.label, `${p}.label`, LEN.label), note: rich(60)(o.note, `${p}.note`) };
   };
 
-  const verdict = obj(r.verdict, "verdict");
-  const idea = obj(r.idea, "idea");
-  const sc = obj(r.scorecard, "scorecard");
-  const ps = obj(r.page_summaries, "page_summaries");
-  const econ = obj(r.economics, "economics");
-  const unit = obj(econ.unit, "economics.unit");
-  if ((unit.max_cac === undefined) === (unit.break_even === undefined)) fail("economics.unit", "expected either max_cac or break_even");
-
-  const assumptions = list<Assumption>(r.riskiest_assumptions, "riskiest_assumptions", 1, LIMITS.riskiest_assumptions, (x, p) => {
-    const o = obj(x, p);
+  const economics = (x: unknown) => {
+    const econ = obj(x, "economics");
+    const unit = obj(econ.unit, "economics.unit");
+    if ((unit.max_cac === undefined) === (unit.break_even === undefined)) fail("economics.unit", "expected either max_cac or break_even");
     return {
-      statement: str(o.statement, `${p}.statement`, 90),
-      ...(o.short !== undefined && { short: str(o.short, `${p}.short`, LEN.line) }),
-      if_false: str(o.if_false, `${p}.if_false`, LEN.line),
-    };
-  });
-
-  return {
-    date: isoDate(r.date, "date"),
-    sources_retrieved: isoDate(r.sources_retrieved, "sources_retrieved"),
-    verdict: {
-      call: oneOf(verdict.call, "verdict.call", ["pursue", "test_first", "drop"] as const),
-      confidence: oneOf<Level>(verdict.confidence, "verdict.confidence", LEVELS),
-      summary: str(verdict.summary, "verdict.summary", LEN.sentence),
-    },
-    idea: {
-      name: str(idea.name, "idea.name", 70),
-      headline: str(idea.headline, "idea.headline", 64),
-      customer: str(idea.customer, "idea.customer", 90),
-      problem: str(idea.problem, "idea.problem", 90),
-      revenue: str(idea.revenue, "idea.revenue", 90),
-    },
-    scorecard: {
-      alternatives: score(sc.alternatives, "scorecard.alternatives"),
-      demand_evidence: score(sc.demand_evidence, "scorecard.demand_evidence"),
-      economics: score(sc.economics, "scorecard.economics"),
-      distribution: score(sc.distribution, "scorecard.distribution"),
-      blockers: score(sc.blockers, "scorecard.blockers"),
-    },
-    page_summaries: {
-      market: str(ps.market, "page_summaries.market", LEN.sentence),
-      business: str(ps.business, "page_summaries.business", LEN.sentence),
-      next_steps: str(ps.next_steps, "page_summaries.next_steps", LEN.sentence),
-    },
-    alternatives: list<Alternative>(r.alternatives, "alternatives", 1, LIMITS.alternatives, (x, p) => {
-      const o = obj(x, p);
-      const workaround = o.workaround === true;
-      return {
-        name: str(o.name, `${p}.name`, 26),
-        ...(workaround ? { workaround } : { examples: str(o.examples, `${p}.examples`, 30) }),
-        what_it_does: str(o.what_it_does, `${p}.what_it_does`, 64),
-        price: o.price === PRICE_NOT_PUBLIC ? PRICE_NOT_PUBLIC : claim(30)(o.price, `${p}.price`),
-        weakness: rich(90)(o.weakness, `${p}.weakness`),
-      };
-    }),
-    market_gap: rich(LEN.long)(r.market_gap, "market_gap"),
-    // Empty when no checkable signal was found; the page says so.
-    demand_evidence: list<DemandSignal>(r.demand_evidence, "demand_evidence", 0, LIMITS.demand_evidence, (x, p) => {
-      const o = obj(x, p);
-      return {
-        signal: str(o.signal, `${p}.signal`, 26),
-        rating: oneOf<Rating>(o.rating, `${p}.rating`, RATINGS),
-        value: str(o.value, `${p}.value`, LEN.big),
-        detail: claim(50)(o.detail, `${p}.detail`),
-      };
-    }),
-    economics: {
       ...(econ.market_size !== undefined && {
         market_size: marketSize(
           list(obj(econ.market_size, "economics.market_size").inputs, "economics.market_size.inputs", 2, LIMITS.market_inputs, figure(7)),
@@ -199,22 +159,87 @@ export function parseReport(input: unknown): TeardownReport {
         margin: figure(LEN.big)(unit.margin, "economics.unit.margin"),
       },
       ...(econ.workings !== undefined && {
-        workings: list<Working>(econ.workings, "economics.workings", 1, LIMITS.workings, (x, p) => {
-          const o = obj(x, p);
+        workings: list<Working>(econ.workings, "economics.workings", 1, LIMITS.workings, (y, p) => {
+          const o = obj(y, p);
           return { label: str(o.label, `${p}.label`, 16), value: str(o.value, `${p}.value`, 22), note: rich(130)(o.note, `${p}.note`) };
         }),
       }),
-    },
-    distribution: list<Channel>(r.distribution, "distribution", 1, LIMITS.distribution, (x, p) => {
+    };
+  };
+
+  const out: PartialReport = { sources };
+  if (has(r, "date")) out.date = isoDate(r.date, "date");
+  if (has(r, "sources_retrieved")) out.sources_retrieved = isoDate(r.sources_retrieved, "sources_retrieved");
+  if (has(r, "verdict")) {
+    const verdict = obj(r.verdict, "verdict");
+    out.verdict = {
+      call: oneOf(verdict.call, "verdict.call", ["pursue", "test_first", "drop"] as const),
+      confidence: oneOf<Level>(verdict.confidence, "verdict.confidence", LEVELS),
+      summary: str(verdict.summary, "verdict.summary", LEN.sentence),
+    };
+  }
+  if (has(r, "idea")) {
+    const idea = obj(r.idea, "idea");
+    out.idea = {
+      name: str(idea.name, "idea.name", 70),
+      headline: str(idea.headline, "idea.headline", 64),
+      customer: str(idea.customer, "idea.customer", 90),
+      problem: str(idea.problem, "idea.problem", 90),
+      revenue: str(idea.revenue, "idea.revenue", 90),
+    };
+  }
+  if (has(r, "scorecard")) {
+    const sc = obj(r.scorecard, "scorecard");
+    out.scorecard = Object.fromEntries(SCORE_KEYS.filter((k) => has(sc, k)).map((k) => [k, score(sc[k], `scorecard.${k}`)]));
+  }
+  if (has(r, "page_summaries")) {
+    const ps = obj(r.page_summaries, "page_summaries");
+    out.page_summaries = {
+      market: str(ps.market, "page_summaries.market", LEN.sentence),
+      business: str(ps.business, "page_summaries.business", LEN.sentence),
+      next_steps: str(ps.next_steps, "page_summaries.next_steps", LEN.sentence),
+    };
+  }
+  if (has(r, "alternatives")) {
+    out.alternatives = list<Alternative>(r.alternatives, "alternatives", 1, LIMITS.alternatives, (x, p) => {
+      const o = obj(x, p);
+      const workaround = o.workaround === true;
+      return {
+        name: str(o.name, `${p}.name`, 26),
+        ...(workaround ? { workaround } : { examples: str(o.examples, `${p}.examples`, 30) }),
+        what_it_does: str(o.what_it_does, `${p}.what_it_does`, 64),
+        price: o.price === PRICE_NOT_PUBLIC ? PRICE_NOT_PUBLIC : claim(30)(o.price, `${p}.price`),
+        weakness: rich(90)(o.weakness, `${p}.weakness`),
+      };
+    });
+  }
+  if (has(r, "market_gap")) out.market_gap = rich(LEN.long)(r.market_gap, "market_gap");
+  if (has(r, "demand_evidence")) {
+    // Empty when no checkable signal was found; the page says so.
+    out.demand_evidence = list<DemandSignal>(r.demand_evidence, "demand_evidence", 0, LIMITS.demand_evidence, (x, p) => {
+      const o = obj(x, p);
+      return {
+        signal: str(o.signal, `${p}.signal`, 26),
+        rating: oneOf<Rating>(o.rating, `${p}.rating`, RATINGS),
+        value: str(o.value, `${p}.value`, LEN.big),
+        detail: claim(50)(o.detail, `${p}.detail`),
+      };
+    });
+  }
+  if (has(r, "economics")) out.economics = economics(r.economics);
+  if (has(r, "distribution")) {
+    out.distribution = list<Channel>(r.distribution, "distribution", 1, LIMITS.distribution, (x, p) => {
       const o = obj(x, p);
       return {
         name: str(o.name, `${p}.name`, 34),
         examples: str(o.examples, `${p}.examples`, 46),
         rating: oneOf<Rating>(o.rating, `${p}.rating`, RATINGS),
-        reason: claim(110)(o.reason, `${p}.reason`),
+        reason: rich(110)(o.reason, `${p}.reason`),
       };
-    }),
-    blockers: list<Blocker>(r.blockers, "blockers", 0, LIMITS.blockers, (x, p) => {
+    });
+  }
+  if (has(r, "blockers")) {
+    out.blockers = list<Blocker>(r.blockers, "blockers", 0, LIMITS.blockers, (x, p) => {
       const o = obj(x, p);
       return {
         type: str(o.type, `${p}.type`, 12),
@@ -222,13 +247,25 @@ export function parseReport(input: unknown): TeardownReport {
         severity: oneOf<Level>(o.severity, `${p}.severity`, LEVELS),
         detail: claim(LEN.line)(o.detail, `${p}.detail`),
       };
-    }),
-    riskiest_assumptions: assumptions,
-    next_tests: list<NextTest>(r.next_tests, "next_tests", 1, LIMITS.next_tests, (x, p) => {
+    });
+  }
+  if (has(r, "riskiest_assumptions")) {
+    out.riskiest_assumptions = list<Assumption>(r.riskiest_assumptions, "riskiest_assumptions", 1, LIMITS.riskiest_assumptions, (x, p) => {
+      const o = obj(x, p);
+      return {
+        statement: str(o.statement, `${p}.statement`, 90),
+        ...(o.short !== undefined && { short: str(o.short, `${p}.short`, LEN.line) }),
+        if_false: str(o.if_false, `${p}.if_false`, LEN.line),
+      };
+    });
+  }
+  if (has(r, "next_tests")) {
+    const assumptions = out.riskiest_assumptions?.length ?? LIMITS.riskiest_assumptions;
+    out.next_tests = list<NextTest>(r.next_tests, "next_tests", 1, LIMITS.next_tests, (x, p) => {
       const o = obj(x, p);
       const assumption = o.assumption;
-      if (typeof assumption !== "number" || !Number.isInteger(assumption) || assumption < 1 || assumption > assumptions.length) {
-        fail(`${p}.assumption`, `expected an assumption rank from 1 to ${assumptions.length}`);
+      if (typeof assumption !== "number" || !Number.isInteger(assumption) || assumption < 1 || assumption > assumptions) {
+        fail(`${p}.assumption`, `expected an assumption rank from 1 to ${assumptions}`);
       }
       return {
         name: str(o.name, `${p}.name`, 24),
@@ -241,9 +278,9 @@ export function parseReport(input: unknown): TeardownReport {
         kill_threshold: str(o.kill_threshold, `${p}.kill_threshold`, 70),
         ...(o.kill_threshold_short !== undefined && { kill_threshold_short: str(o.kill_threshold_short, `${p}.kill_threshold_short`, 32) }),
       };
-    }),
-    sources,
-  };
+    });
+  }
+  return out;
 }
 
 function isoDate(v: unknown, path: string): string {

@@ -123,7 +123,7 @@ export interface Channel {
   name: string;
   examples: string;
   rating: Rating;
-  reason: Claim;
+  reason: Rich;
 }
 
 export interface Blocker {

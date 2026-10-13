@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyChecks, type CheckResult } from "../lib/engine/factcheck";
-import { SAMPLE_REPORT, buildReport, liveSourceBudgets } from "../lib/engine/report";
+import { SAMPLE_REPORT } from "../lib/engine/fixtures/sample";
+import { SOURCE_BUDGETS, buildPartialReport, laterBudgets } from "../lib/engine/report";
 import type { SourceStore } from "../lib/engine/research";
 import { COUNT_METHOD, demandCheck, parseDemand, settleDemand, type DemandSection } from "../lib/engine/sections/demand";
 import {
@@ -36,11 +37,12 @@ const econ: EconomicsSection = {
 };
 
 describe("source budgets", () => {
-  it("fit the report's source limit together with the sample's remaining sources", () => {
-    const b = liveSourceBudgets();
-    expect(b).toEqual({ alternatives: 7, demand_evidence: 4, economics: 5 });
-    // The sample's distribution and blockers sections still cite 4 sources.
-    expect(b.alternatives + b.demand_evidence + b.economics + 4).toBe(LIMITS.sources);
+  it("give the searching sections fixed budgets and split what they leave between Distribution and Blockers", () => {
+    expect(SOURCE_BUDGETS).toEqual({ alternatives: 7, demand_evidence: 4, economics: 5 });
+    // At their maximum, the first three leave 4.
+    expect(laterBudgets(16)).toEqual({ distribution: 2, blockers: 2 });
+    expect(laterBudgets(13)).toEqual({ distribution: 4, blockers: 3 });
+    expect(laterBudgets(16).distribution + laterBudgets(16).blockers + 16).toBe(LIMITS.sources);
   });
 });
 
@@ -65,9 +67,9 @@ describe("parseDemand", () => {
   it("allows zero signals", () => {
     const none: DemandSection = { signals: [], evidence: "thin", scorecard: { rating: "weak", headline: null, unit: "", finding: "Thin evidence: nothing checkable found." } };
     expect(parseDemand(none, store).signals).toEqual([]);
-    const report = buildReport(null, store, { demand: none });
+    const report = buildPartialReport({ demand_evidence: none }, store);
     expect(report.demand_evidence).toEqual([]);
-    expect(report.scorecard.demand_evidence).toMatchObject({ key_figure: { value: "0", unit: "signals" }, basis: "estimated" });
+    expect(report.scorecard!.demand_evidence).toMatchObject({ key_figure: { value: "0", unit: "signals" }, basis: "estimated" });
     expect(report.sources.find((s) => s.text === `Estimate. ${COUNT_METHOD}`)).toBeDefined();
   });
 
@@ -181,16 +183,16 @@ describe("economics fact-check", () => {
   });
 });
 
-describe("buildReport with the live demand and economics sections", () => {
-  const report = buildReport(null, store, { demand, economics: econ, date: "2026-10-12" });
+describe("buildPartialReport with the demand and economics sections", () => {
+  const report = buildPartialReport({ demand_evidence: demand, economics: econ }, store, { date: "2026-10-12" });
 
-  it("replaces the sample's demand and economics, numbering their sources after the sample's alternatives", () => {
-    expect(report.demand_evidence.map((d) => d.value)).toEqual(["1,900", "212"]);
-    expect(report.scorecard.demand_evidence).toMatchObject({ key_figure: { value: "212", unit: "reviews" }, basis: "found" });
+  it("builds demand and economics, with the arithmetic cited once", () => {
+    expect(report.demand_evidence!.map((d) => d.value)).toEqual(["1,900", "212"]);
+    expect(report.scorecard!.demand_evidence).toMatchObject({ key_figure: { value: "212", unit: "reviews" }, basis: "found" });
     expect(report.economics).toMatchObject({ per: "groom", currency: "CAD", unit: { margin: { value: "71%" }, break_even: { value: "44" } } });
-    expect(report.economics.market_size).toBeUndefined();
-    expect(report.economics.unit.max_cac).toBeUndefined();
-    expect(report.scorecard.economics).toMatchObject({ key_figure: { value: "71%", unit: "gross margin" }, basis: "estimated" });
+    expect(report.economics!.market_size).toBeUndefined();
+    expect(report.economics!.unit.max_cac).toBeUndefined();
+    expect(report.scorecard!.economics).toMatchObject({ key_figure: { value: "71%", unit: "gross margin" }, basis: "estimated" });
     expect(report.sources.filter((s) => s.text === `Estimate. ${ARITHMETIC_METHOD}`)).toHaveLength(1);
   });
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CheckClaim, Fixed, SectionCheck } from "../factcheck";
 import type { IdeaSpec } from "../intake";
 import { STAGE_MODELS, loadPrompt } from "../llm";
-import { buildReport, liveSourceBudgets } from "../report";
+import { SOURCE_BUDGETS, buildPartialReport } from "../report";
 import type { SourceStore } from "../research";
 import { LIMITS } from "../validate";
 import { PartSchema, type Part } from "./alternatives";
@@ -91,7 +91,7 @@ export function demandScore(section: DemandSection): { rating: DemandSection["sc
  * Throws with a message that names the field, so the writer can be told what
  * to fix.
  */
-export function parseDemand(raw: unknown, store: SourceStore, maxSources = liveSourceBudgets().demand_evidence): DemandSection {
+export function parseDemand(raw: unknown, store: SourceStore, maxSources = SOURCE_BUDGETS.demand_evidence): DemandSection {
   const section = DemandSchema.parse(raw);
   const ids = new Set(store.map((s) => s.id));
   const cited = new Set<string>();
@@ -123,12 +123,12 @@ export function parseDemand(raw: unknown, store: SourceStore, maxSources = liveS
 /** Validates against the section rules and, through a report build, the page limits. */
 function parseForReport(raw: unknown, store: SourceStore, maxSources: number): DemandSection {
   const section = parseDemand(raw, store, maxSources);
-  buildReport(null, store, { demand: section });
+  buildPartialReport({ demand_evidence: section }, store);
   return section;
 }
 
 /** Fact-check's view of the section. A signal whose figure its source doesn't state is dropped, never reworded. */
-export function demandCheck(store: SourceStore, maxSources = liveSourceBudgets().demand_evidence): SectionCheck<DemandSection> {
+export function demandCheck(store: SourceStore, maxSources = SOURCE_BUDGETS.demand_evidence): SectionCheck<DemandSection> {
   const index = (id: string) => {
     const m = id.match(/^signals\[(\d+)\]$/);
     if (!m) throw new Error(`unknown claim id ${id}`);
@@ -157,7 +157,7 @@ export function demandCheck(store: SourceStore, maxSources = liveSourceBudgets()
 }
 
 /** The section's own instructions, after the shared writer context. */
-export function demandPrompt(maxSources = liveSourceBudgets().demand_evidence): string {
+export function demandPrompt(maxSources = SOURCE_BUDGETS.demand_evidence): string {
   return loadPrompt(DEMAND_WRITE_PROMPT)
     .replaceAll("{{max_sources}}", String(maxSources))
     .replaceAll("{{min_signals}}", String(MIN_SIGNALS));
@@ -175,7 +175,7 @@ export function researchDemand(spec: IdeaSpec, store: SourceStore, notes: string
 
 /** Writes the section from the shared writer context. `store` must be the store the context was built from. */
 export function writeDemand(context: string, store: SourceStore, options: SectionOptions = {}) {
-  const maxSources = liveSourceBudgets().demand_evidence;
+  const maxSources = SOURCE_BUDGETS.demand_evidence;
   return runWriter("demand_evidence", {
     model: options.model ?? STAGE_MODELS.demand_evidence,
     context,
