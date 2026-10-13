@@ -1,32 +1,32 @@
-// Runs the pipeline (intake, research, the Existing Alternatives section,
-// fact-check) on the three test ideas, builds the partial report (live
-// alternatives, the rest from the sample), and writes everything to
-// tests/runs/<timestamp>/. Billable: each idea costs real API money.
+// Runs the pipeline (intake, research, the Existing Alternatives, Demand
+// Evidence and Economics sections, fact-check of each) on the three test ideas,
+// builds the partial report (live sections, the rest from the sample), and
+// writes everything to tests/runs/<timestamp>/. Billable: each idea costs real
+// API money.
 //
-// Test-only extras, costed separately from the pipeline: a second fact-check
-// pass on the checked section, with the same page cache (the "after" support
-// rate; --no-verify skips it),
-// and a max_tokens: 0 request that reuses the writers' cached context with a
-// different section prompt, to measure what each further writer pays for it.
+// Test-only extra, costed separately from the pipeline: a second fact-check
+// pass on each checked section, with the same page cache (the "after" support
+// rate; --no-verify skips it).
 //
 //   npm run test:ideas            # also stores teardowns + sources in Neon when DATABASE_URL is set
 //   npm run test:ideas -- --no-db # API only
 //   npm run test:ideas -- --only b-dog-grooming
 //   npm run test:ideas -- --max-searches 10 --research-model claude-opus-5-5 --intake-model claude-opus-5-5
-//   npm run test:ideas -- --alternatives-searches 4 --alternatives-model claude-opus-5-5
+//   npm run test:ideas -- --alternatives-searches 4 --demand-searches 3 --economics-searches 3
 //
 // Needs ANTHROPIC_API_KEY (and optionally DATABASE_URL) in .env.local or the environment.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkClaims, supportRate } from "../lib/engine/factcheck";
+import { checkClaimList, collectClaims, supportRate, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageCache } from "../lib/engine/fetch";
 import type { IntakeInput } from "../lib/engine/input";
-import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, costUsd, type StageRun, type TokenUsage } from "../lib/engine/llm";
+import { ZERO_USAGE, costUsd, type StageRun, type TokenUsage } from "../lib/engine/llm";
 import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
 import { buildReport } from "../lib/engine/report";
-import { SECTIONS, SECTION_NAMES } from "../lib/engine/sections/config";
-import { WRITE_INSTRUCTION, writerContext, writerParams } from "../lib/engine/sections/common";
+import { SECTION_NAMES } from "../lib/engine/sections/config";
+import { demandCheck, demandScore } from "../lib/engine/sections/demand";
+import { computeEconomics, economicsCheck, money } from "../lib/engine/sections/economics";
 import { createTeardown, dbPageCache, runStages } from "../lib/engine/store";
 
 try {
@@ -82,6 +82,8 @@ const options: StageOptions = {
     model: flag("--alternatives-model"),
     maxSearches: flag("--alternatives-searches") ? Number(flag("--alternatives-searches")) : undefined,
   },
+  demand_evidence: { maxSearches: flag("--demand-searches") ? Number(flag("--demand-searches")) : undefined },
+  economics: { maxSearches: flag("--economics-searches") ? Number(flag("--economics-searches")) : undefined },
   factcheck: { model: flag("--factcheck-model") },
 };
 const verify = !process.argv.includes("--no-verify");
@@ -138,20 +140,22 @@ async function main() {
     write("notes.md", `${r.notes}\n`);
     write("runs.json", r.runs);
     write("research-raw.json", `${JSON.stringify(r.responses, stripEncrypted, 2)}\n`);
-    write("alternatives-draft.json", r.alternatives.draft);
-    write("alternatives.json", r.alternatives.section);
-    write("alternatives-notes.md", `${r.alternatives.notes}\n`);
-    write("alternatives-raw.json", `${JSON.stringify(r.alternatives.responses, stripEncrypted, 2)}\n`);
-    write("factcheck.json", r.factcheck.log);
+    for (const [name, file] of [["alternatives", "alternatives"], ["demand_evidence", "demand"], ["economics", "economics"]] as const) {
+      const sec = r[name];
+      write(`${file}-draft.json`, sec.draft);
+      write(`${file}.json`, sec.section);
+      write(`${file}-notes.md`, `${sec.notes}\n`);
+      write(`${file}-raw.json`, `${JSON.stringify(sec.responses, stripEncrypted, 2)}\n`);
+      write(`factcheck-${file}.json`, sec.factcheck.log);
+    }
     write("writer-context.md", r.writerContext);
-    // Live alternatives, scorecard.alternatives and market_gap; every other section from the sample.
-    write("report.json", buildReport(r.alternatives.section, r.sources));
+    // Live sections; every other section from the sample.
+    write("report.json", buildReport(r.alternatives.section, r.sources, { demand: r.demand_evidence.section, economics: r.economics.section }));
 
-    const probe = await probeSharedContext(r);
-    const after = verify ? await checkClaims(r.alternatives.section, r.sources, { ...options.factcheck, pages: r.pages }) : null;
+    const after = verify ? await verifyAll(r) : null;
     if (after) write("factcheck-verify.json", after.results);
     console.log(`✓ ${idea.slug}: ${r.sources.length} sources, $${r.runs.reduce((n, x) => n + x.cost_usd, 0).toFixed(4)}`);
-    return { ...r, probe, after };
+    return { ...r, after };
   }));
 
   const summary = ideas.map((idea, i) => {
@@ -159,50 +163,50 @@ async function main() {
     if (res.status === "rejected") return { slug: idea.slug, error: String(res.reason) };
     const r = res.value;
     const find = (stage: string, step?: string) => r.runs.find((x) => x.stage === stage && x.step === step);
-    const usd = (run: StageRun | undefined | null) => run?.cost_usd ?? 0;
-    const altResearch = find("alternatives", "research");
-    const altWrite = find("alternatives", "write")!;
-    const factcheck = find("factcheck");
-    const before = supportRate(r.factcheck.excerptResults);
-    const withPages = supportRate(r.factcheck.results);
-    const pages = factcheck?.pages ?? [];
-    const afterRate = r.after ? supportRate(r.after.results) : null;
-    const actions = (a: string) => r.factcheck.log.filter((l) => l.action === a).length;
+    const check = (section: string) => r.runs.find((x) => x.stage === "factcheck" && x.section === section);
+    const usd = (run: StageRun | undefined | null) => round(run?.cost_usd ?? 0);
+    const rates = (name: "alternatives" | "demand_evidence" | "economics") => {
+      const f = r[name].factcheck;
+      const after = r.after?.results[name];
+      const show = (x: ReturnType<typeof supportRate>) => (x.checked ? `${x.supported}/${x.checked}` : "0/0");
+      return `${show(supportRate(f.excerptResults))} → ${show(supportRate(f.results))} → ${after ? show(supportRate(after)) : "–"}`;
+    };
+    const all = (key: "excerptResults" | "results") => supportRate((["alternatives", "demand_evidence", "economics"] as const).flatMap((n) => r[n].factcheck[key]));
+    const afterAll = r.after ? supportRate(Object.values(r.after.results).flat()) : null;
+    const actions = (a: string) => (["alternatives", "demand_evidence", "economics"] as const).flatMap((n) => r[n].factcheck.log).filter((l) => l.action === a).length;
     const key = keyCompetitors(idea, r);
-    const projection = projectReport(r, { altResearch, altWrite, factcheck, probe: r.probe });
+    const d = r.demand_evidence.section;
+    const ds = demandScore(d);
+    const e = r.economics.section;
+    const ec = computeEconomics(e);
     return {
       slug: idea.slug,
       teardown_id: r.id,
-      research_searches: find("research")?.usage.web_search_requests ?? 0,
-      alt_searches: altResearch?.usage.web_search_requests ?? 0,
+      searches: `${find("research")?.usage.web_search_requests ?? 0} + alt ${find("alternatives", "research")?.usage.web_search_requests ?? 0}`
+        + ` + demand ${find("demand_evidence", "research")?.usage.web_search_requests ?? 0} + econ ${find("economics", "research")?.usage.web_search_requests ?? 0}`,
       sources: r.sources.length,
-      alt_research_cache_write: altResearch?.usage.cache_creation_input_tokens ?? 0,
-      alt_research_cache_read: altResearch?.usage.cache_read_input_tokens ?? 0,
-      alt_search_rounds: searchRounds(r.alternatives.responses),
-      writer_context_tokens: altWrite.usage.cache_creation_input_tokens + altWrite.usage.cache_read_input_tokens,
-      probe_cache_read: r.probe.cache_read_input_tokens,
-      probe_cache_write: r.probe.cache_creation_input_tokens,
       intake_usd: usd(find("intake")),
       research_usd: usd(find("research")),
-      alt_research_usd: usd(altResearch),
-      alt_write_usd: usd(altWrite),
-      factcheck_usd: usd(factcheck),
-      factcheck_recheck_usd: factcheck?.recheck_cost_usd ?? 0,
+      section_research_usd: `alt ${usd(find("alternatives", "research"))}, demand ${usd(find("demand_evidence", "research"))}, econ ${usd(find("economics", "research"))}`,
+      writers_usd: `alt ${usd(find("alternatives", "write"))}, demand ${usd(find("demand_evidence", "write"))}, econ ${usd(find("economics", "write"))}`,
+      writer_cache: (["alternatives", "demand_evidence", "economics"] as const)
+        .map((n) => { const u = find(n, "write")?.usage; return `${n.split("_")[0]} w${u?.cache_creation_input_tokens ?? 0}/r${u?.cache_read_input_tokens ?? 0}`; }).join(", "),
+      writer_retries: (["alternatives", "demand_evidence", "economics"] as const).map((n) => find(n, "write")?.retries?.length ?? 0).join("/"),
+      factcheck_usd: `alt ${usd(check("alternatives"))}, demand ${usd(check("demand_evidence"))}, econ ${usd(check("economics"))}`,
       total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
-      projected_9_sections_usd: projection.total,
-      claims_checked: before.checked,
-      support_before: `${before.supported}/${before.checked} (${pct(before.rate)})`,
-      partial_before: before.partial,
-      unsupported_before: before.unsupported,
-      support_with_pages: `${withPages.supported}/${withPages.checked} (${pct(withPages.rate)})`,
-      pages_fetched: `${pages.filter((p) => p.ok).length} ok, ${pages.filter((p) => !p.ok).length} failed`,
+      projected_9_sections_usd: projectReport(r),
+      support_alt: rates("alternatives"),
+      support_demand: rates("demand_evidence"),
+      support_econ: rates("economics"),
+      support_all: `${pct(all("excerptResults").rate)} → ${pct(all("results").rate)} → ${afterAll ? `${pct(afterAll.rate)} (${afterAll.supported}/${afterAll.checked})` : "–"}`,
       fixes: `rewritten ${actions("rewritten")}, estimated ${actions("estimated")}, dropped ${actions("dropped")}, unresolved ${actions("unresolved")}`,
-      support_after: afterRate ? `${afterRate.supported}/${afterRate.checked} (${pct(afterRate.rate)})` : "–",
-      verify_usd: usd(r.after?.run),
+      verify_usd: round(r.after?.cost_usd ?? 0),
       rows: `${r.alternatives.section.alternatives.length} of ${r.alternatives.draft.alternatives.length}`,
-      alternatives: r.alternatives.section.alternatives.map((a) => (a.examples ? `${a.name} (${a.examples})` : a.name)).join("; "),
       key_in_section: key.in_section,
-      key_in_sources: key.in_sources,
+      demand: `${d.evidence}, ${ds.rating}, ${ds.key_figure.value} ${ds.key_figure.unit}: ${ds.finding}`
+        + ` [${d.signals.map((s) => `${s.kind} ${s.value}`).join("; ") || "no signals"}; ${r.demand_evidence.draft.signals.length} drafted]`,
+      economics: `${e.scorecard.rating}, ${money(e.price.amount)} − ${money(e.unit_cost.amount)} = ${Math.round(ec.margin * 100)}% margin,`
+        + ` ${money(e.fixed_costs.amount)}/mo fixed, break-even ${ec.breakEven ?? "none"} ${e.break_even_unit} (${e.currency}): ${e.scorecard.finding}`,
     };
   });
   mkdirSync(dir, { recursive: true });
@@ -215,59 +219,45 @@ async function main() {
 const round = (n: number) => Math.round(n * 1e4) / 1e4;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/**
- * How many rounds of searches the model ran: searches issued together before
- * any result came back count as one round. Each round after the first re-reads
- * the whole context so far from cache, which is what drives cache reads up.
- */
-function searchRounds(responses: StagesResult["responses"]): number {
-  const types = responses.flatMap((x) => x.message.content.map((b) => b.type));
-  return types.filter((t, i) => t === "server_tool_use" && types[i - 1] !== "server_tool_use").length;
-}
-
-/**
- * A writer request with a different section prompt and max_tokens: 0. It bills
- * only input, so its cache read is what each further section writer pays for
- * the shared context.
- */
-async function probeSharedContext(r: StagesResult): Promise<TokenUsage> {
-  const msg = await anthropic().messages.create(writerParams(
-    { model: options.alternatives?.model ?? STAGE_MODELS.alternatives, context: r.writerContext, sectionPrompt: "# Section: probe\n\nThis request only measures the cached context." },
-    [{ role: "user", content: WRITE_INSTRUCTION }],
-    0,
-  ));
-  return addUsage(ZERO_USAGE, msg.usage);
+/** A fresh check of each fixed section, with the same pages. Test-only: graded by the same checker, so not independent. */
+async function verifyAll(r: StagesResult & { pages: PageCache }) {
+  const opts = { ...options.factcheck, pages: r.pages };
+  const runs = await Promise.all([
+    checkClaimList(collectClaims(r.alternatives.section), r.sources, opts),
+    checkClaimList(demandCheck(r.sources).claims(r.demand_evidence.section), r.sources, opts),
+    checkClaimList(economicsCheck(r.sources).claims(r.economics.section), r.sources, opts),
+  ]);
+  const results: Record<"alternatives" | "demand_evidence" | "economics", CheckResult[]> = {
+    alternatives: runs[0].results, demand_evidence: runs[1].results, economics: runs[2].results,
+  };
+  return { results, cost_usd: runs.reduce((n, x) => n + (x.run?.cost_usd ?? 0), 0) };
 }
 
 /**
  * Projected cost of a full 9-section report from this run's measurements.
- * - Intake and shared research: as measured.
- * - Each section with searches > 0 (sections/config.ts): the alternatives
- *   research cost, scaled by its configured searches.
- * - Writers: the shared context grows by what each searching section adds
- *   (alternatives' addition, scaled by searches). The first writer writes it to
- *   cache and the other 8 read it. Each writer's own input and output match the
- *   alternatives writer's, retries included. Verdict and page summaries also
- *   read the other sections' JSON, about 3k tokens each, uncached.
- * - Fact-check: the alternatives fact-check × 9.
+ * - Intake, shared research, the three searching sections' research, their
+ *   writers and their fact-checks: as measured. No other section searches
+ *   (sections/config.ts), so the shared writer context is complete.
+ * - Each of the 6 remaining writers reads the context from cache (the demand
+ *   and economics writers' measured cache read, which started after the
+ *   alternatives writer wrote it) and pays the measured writers' average own
+ *   input and output, retries included. Verdict and page summaries also read
+ *   the other sections' JSON, about 3k tokens each, uncached.
+ * - Fact-check: the 3 measured fact-checks' average, for each remaining section.
  */
-function projectReport(r: StagesResult, m: { altResearch?: StageRun; altWrite: StageRun; factcheck?: StageRun; probe: TokenUsage }) {
-  const writeModel = m.altWrite.model;
-  const sharedOnly = new Set(r.alternatives.added.map((s) => s.id));
-  const ctx0 = writerContext(r.spec, r.sources.filter((s) => !sharedOnly.has(s.id)), [{ label: "Shared research", text: r.notes }]);
-  const p1 = m.probe.cache_read_input_tokens || m.altWrite.usage.cache_creation_input_tokens;
-  const p0 = p1 * (ctx0.length / r.writerContext.length);
-  const altSearches = options.alternatives?.maxSearches ?? SECTIONS.alternatives.searches;
-  const searching = SECTION_NAMES.filter((n) => SECTIONS[n].searches > 0);
-  const p3 = p1 + searching.filter((n) => n !== "alternatives").reduce((t, n) => t + ((p1 - p0) * SECTIONS[n].searches) / altSearches, 0);
-
-  const price = (u: Partial<TokenUsage>) => costUsd(writeModel, { ...ZERO_USAGE, ...u });
-  const ownPart = price({ input_tokens: m.altWrite.usage.input_tokens, output_tokens: m.altWrite.usage.output_tokens });
-  const writers = price({ cache_creation_input_tokens: Math.round(p3) }) + 8 * price({ cache_read_input_tokens: Math.round(p3) })
-    + SECTION_NAMES.length * ownPart + price({ input_tokens: 2 * 3000 });
-  const research = searching.reduce((t, n) => t + ((m.altResearch?.cost_usd ?? 0) * SECTIONS[n].searches) / altSearches, 0);
-  const fixed = r.runs.filter((x) => x.stage === "intake" || x.stage === "research").reduce((t, x) => t + x.cost_usd, 0);
-  return { total: round(fixed + research + writers + (m.factcheck?.cost_usd ?? 0) * SECTION_NAMES.length), context_tokens_9: Math.round(p3) };
+function projectReport(r: StagesResult): number {
+  const writes = (["alternatives", "demand_evidence", "economics"] as const).map((n) => r.runs.find((x) => x.stage === n && x.step === "write")!);
+  const model = writes[0].model;
+  const price = (u: Partial<TokenUsage>) => costUsd(model, { ...ZERO_USAGE, ...u });
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const read = Math.max(...writes.slice(1).map((w) => w.usage.cache_read_input_tokens), writes[0].usage.cache_creation_input_tokens);
+  const own = avg(writes.map((w) => price({ input_tokens: w.usage.input_tokens, output_tokens: w.usage.output_tokens })));
+  const remaining = SECTION_NAMES.length - 3;
+  const writers = remaining * (price({ cache_read_input_tokens: read }) + own) + price({ input_tokens: 2 * 3000 });
+  const checks = r.runs.filter((x) => x.stage === "factcheck");
+  const factcheck = remaining * avg(checks.map((x) => x.cost_usd));
+  const measured = r.runs.reduce((t, x) => t + x.cost_usd, 0);
+  return round(measured + writers + factcheck);
 }
 
 // A table to paste into tests/runs-summary.md, which is committed (tests/runs/ is not).

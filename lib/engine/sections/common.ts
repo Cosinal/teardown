@@ -69,6 +69,12 @@ export function sectionResearchRequest(spec: IdeaSpec, store: SourceStore, notes
   ].join("\n\n");
 }
 
+/** Per-section overrides, e.g. for test runs. Writers must share one model to share the cached context. */
+export interface SectionOptions {
+  model?: string;
+  maxSearches?: number;
+}
+
 export interface SectionResearch {
   /** The shared store plus this section's new sources. */
   sources: SourceStore;
@@ -82,29 +88,44 @@ export interface SectionResearch {
 }
 
 /**
+ * A section's own searches, against the shared research. Null when it runs no
+ * searches. The results are merged into the store separately (mergeResearch),
+ * so several sections can search at once and still merge in a fixed order.
+ */
+export async function searchSection(
+  stage: Stage,
+  { spec, store, notes, searches, model, prompt }: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
+): Promise<{ responses: SearchResponse[]; run: StageRun } | null> {
+  if (searches <= 0) return null;
+  const started = new Date();
+  const { responses, usage } = await searchLoop(stage, (continuation) => searchParams({
+    model, maxSearches: searches, system: loadPrompt(prompt), request: sectionResearchRequest(spec, store, notes),
+  }, continuation));
+  return {
+    responses,
+    run: {
+      stage, step: "research", prompt_version: prompt, model: responses[0].message.model, usage,
+      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+    },
+  };
+}
+
+/** Merges a section's search results into the store. Notes are tagged with ids from the merged store. */
+export function mergeResearch(store: SourceStore, searched: { responses: SearchResponse[]; run: StageRun } | null): SectionResearch {
+  if (!searched) return { sources: store, changed: [], notes: "", run: null, responses: [] };
+  const { sources, changed } = mergeSources(store, buildSourceStore(searched.responses));
+  return { sources, changed, notes: notesText(searched.responses, sources), run: searched.run, responses: searched.responses };
+}
+
+/**
  * A section's own web research, merged into the shared store. With 0 searches
  * it makes no API call and returns the store unchanged.
  */
 export async function runSectionResearch(
   stage: Stage,
-  { spec, store, notes, searches, model, prompt }: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
+  args: { spec: IdeaSpec; store: SourceStore; notes: string; searches: number; model: string; prompt: string },
 ): Promise<SectionResearch> {
-  if (searches <= 0) return { sources: store, changed: [], notes: "", run: null, responses: [] };
-  const started = new Date();
-  const { responses, usage } = await searchLoop(stage, (continuation) => searchParams({
-    model, maxSearches: searches, system: loadPrompt(prompt), request: sectionResearchRequest(spec, store, notes),
-  }, continuation));
-  const { sources, changed } = mergeSources(store, buildSourceStore(responses));
-  return {
-    sources,
-    changed,
-    notes: notesText(responses, sources),
-    run: {
-      stage, step: "research", prompt_version: prompt, model: responses[0].message.model, usage,
-      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
-    },
-    responses,
-  };
+  return mergeResearch(args.store, await searchSection(stage, args));
 }
 
 /**

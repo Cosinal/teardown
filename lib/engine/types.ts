@@ -93,15 +93,30 @@ export interface Figure {
   note: Rich;
 }
 
+/** One line of the arithmetic behind the unit economics, e.g. "Gross margin", "71%", "($80 − $23) ÷ $80". */
+export interface Working {
+  label: string;
+  value: string;
+  note: Rich;
+}
+
 export interface Economics {
-  /** Bottom-up sizing: inputs are multiplied together to give `result`. */
-  market_size: { inputs: Figure[]; result: Figure };
+  /** Bottom-up sizing: inputs are multiplied together to give `result`. Optional: the engine leaves it out. */
+  market_size?: { inputs: Figure[]; result: Figure };
+  /** What one sale is, e.g. "groom" or "customer a month". Shown as "Unit economics, per …". Defaults to "report". */
+  per?: string;
+  /** Currency of every figure, e.g. "CAD", when it is not obvious. */
+  currency?: string;
+  /** Four figures: price, cost to serve, margin, and either max CAC (older reports) or break-even. */
   unit: {
     price: Figure;
     cost_to_serve: Figure;
-    max_cac: Figure;
+    max_cac?: Figure;
+    break_even?: Figure;
     margin: Figure;
   };
+  /** The inputs and arithmetic behind `unit`, in reading order. */
+  workings?: Working[];
 }
 
 export interface Channel {

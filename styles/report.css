@@ -152,6 +152,11 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
 .td-sizing-label{margin-top: 4px; font-size: 12px; line-height: 17px; font-weight: 600}
 .td-sizing-note{font-size: 11px; line-height: 15px; color: #3F444C}
 .td-op{font-family: 'IBM Plex Serif', Georgia, 'Times New Roman', serif; font-size: 26px; line-height: 46px; color: #5C626B; text-align: center}
+.td-workings{margin-top: 8px; border-top: 1px solid #BFC3C9}
+.td-workings tbody > tr > *{padding: 6px 12px 6px 0}
+.td-workings tbody > tr > :last-child{padding: 6px 0}
+.td-workings tbody th{width: 120px; font-weight: 600}
+.td-workings-value{width: 150px; white-space: nowrap; font-variant-numeric: tabular-nums}
 .td-unit{margin-top: 8px; background: #F3F4F6; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))}
 .td-unit > div{padding: 16px 16px 18px; border-right: 1px solid #BFC3C9}
 .td-unit > div:last-child{border-right: 0}

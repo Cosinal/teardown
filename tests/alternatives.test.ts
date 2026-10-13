@@ -88,7 +88,8 @@ describe("buildReport", () => {
     const d = report.demand_evidence[0].detail;
     const s = SAMPLE_REPORT.demand_evidence[0].detail;
     expect(report.sources[d.source - 1]).toEqual(SAMPLE_REPORT.sources[s.source - 1]);
-    expect(report.sources).toHaveLength(3 + (20 - liveSourceBudget()));
+    // The sample's other sections cite 10 of its 14 sources.
+    expect(report.sources).toHaveLength(3 + 10);
     expect(report.date).toBe("2026-10-12");
     expect(report.sources_retrieved).toBe("2026-10-11");
   });

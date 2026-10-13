@@ -1,6 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-export const POLICY_VERSION = "2026-10-10";
+export const POLICY_VERSION = "2026-10-12";
 
 let client: NeonQueryFunction<false, false> | undefined;
 let ready: Promise<unknown> | undefined;

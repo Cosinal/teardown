@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import type { Cite, Claim, Figure, Level, Rating, Rich, ScoreEntry, TeardownReport, VerdictCall } from "@/lib/engine/types";
+import type { Cite, Claim, Economics, Figure, Level, Rating, Rich, ScoreEntry, TeardownReport, VerdictCall, Working } from "@/lib/engine/types";
 
 // Renders a TeardownReport as the 5-page design. Styles live in styles/report.css.
 
@@ -231,6 +231,7 @@ function MarketPage({ r }: { r: TeardownReport }) {
       <section>
         <SectionHead title="Demand evidence" score={r.scorecard.demand_evidence} />
         <div className="td-demand">
+          {!r.demand_evidence.length && <p className="td-empty">No checkable demand signal found.</p>}
           {r.demand_evidence.map((d, i) => (
             <article key={i}>
               <div className="td-demand-top">
@@ -259,12 +260,53 @@ function SizingFigure({ f, result }: { f: Figure; result?: boolean }) {
   );
 }
 
-function BusinessPage({ r }: { r: TeardownReport }) {
-  const { inputs, result } = r.economics.market_size;
+function Sizing({ size }: { size: NonNullable<Economics["market_size"]> }) {
+  const { inputs, result } = size;
   // The design's column weights for three inputs; equal weights otherwise.
   const weights = inputs.length === 3 ? [1.3, 0.8, 1] : inputs.map(() => 1);
   const columns = [...weights.map((w) => `minmax(min-content, ${w}fr) 16px`), "minmax(min-content, 1.15fr)"].join(" ");
-  const u = r.economics.unit;
+  return (
+    <>
+      <h3 className="td-h3 td-sizing-h">Bottom-up market size</h3>
+      <div className="td-sizing" style={{ gridTemplateColumns: columns }}>
+        {inputs.map((f, i) => (
+          <Fragment key={i}>
+            <SizingFigure f={f} />
+            {i < inputs.length - 1
+              ? <div aria-label="times" className="td-op">×</div>
+              : <div aria-label="equals" className="td-op">=</div>}
+          </Fragment>
+        ))}
+        <SizingFigure f={result} result />
+      </div>
+    </>
+  );
+}
+
+function Workings({ rows }: { rows: Working[] }) {
+  return (
+    <>
+      <h3 className="td-h3 td-sizing-h">How the numbers work</h3>
+      <table className="td-table td-workings">
+        <tbody>
+          {rows.map((w, i) => (
+            <tr key={i}>
+              <th scope="row">{w.label}</th>
+              <td className="td-workings-value">{w.value}</td>
+              <td><Text value={w.note} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function BusinessPage({ r }: { r: TeardownReport }) {
+  const e = r.economics;
+  const u = e.unit;
+  // Older reports show max CAC where newer ones show break-even.
+  const figures = u.break_even ? [u.price, u.cost_to_serve, u.margin, u.break_even] : [u.price, u.cost_to_serve, u.max_cac!, u.margin];
   return (
     <Sheet n={3} report={r}>
       <TitleBlock n={3} title="Business" dek={r.page_summaries.business} />
@@ -272,22 +314,12 @@ function BusinessPage({ r }: { r: TeardownReport }) {
       <section>
         <SectionHead title="Economics" score={r.scorecard.economics} />
 
-        <h3 className="td-h3 td-sizing-h">Bottom-up market size</h3>
-        <div className="td-sizing" style={{ gridTemplateColumns: columns }}>
-          {inputs.map((f, i) => (
-            <Fragment key={i}>
-              <SizingFigure f={f} />
-              {i < inputs.length - 1
-                ? <div aria-label="times" className="td-op">×</div>
-                : <div aria-label="equals" className="td-op">=</div>}
-            </Fragment>
-          ))}
-          <SizingFigure f={result} result />
-        </div>
+        {e.market_size && <Sizing size={e.market_size} />}
+        {e.workings && <Workings rows={e.workings} />}
 
-        <h3 className="td-h3 td-unit-h">Unit economics, per report</h3>
+        <h3 className="td-h3 td-unit-h">Unit economics, per {e.per ?? "report"}{e.currency ? ` (${e.currency})` : ""}</h3>
         <div className="td-unit">
-          {[u.price, u.cost_to_serve, u.max_cac, u.margin].map((f, i) => (
+          {figures.map((f, i) => (
             <div key={i}>
               <div className="td-unit-label">{f.label}</div>
               <div className="td-unit-value">{f.value}</div>
