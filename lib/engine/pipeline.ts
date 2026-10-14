@@ -27,7 +27,7 @@ import type { TeardownReport } from "./types";
  * "drafted" is kept for older rows: their searching sections were written
  * and checked, with no report.
  */
-export type TeardownStatus = "queued" | "intake" | "research" | "section_research" | "writing" | "factcheck" | "drafted" | "failed" | "done";
+export type TeardownStatus = "awaiting_payment" | "queued" | "intake" | "research" | "section_research" | "writing" | "factcheck" | "drafted" | "failed" | "done";
 
 export interface StageOptions {
   intake?: { model?: string };

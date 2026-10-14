@@ -28,6 +28,8 @@ footer a{margin-left:24px}footer a:hover{color:var(--ink)}
 .intake button{border:0;background:var(--ink);color:#fff;padding:18px 28px;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:0}
 .intake button:hover{background:var(--accent)}
 .intake button:disabled{background:var(--mute);cursor:wait}
+.intake label.check{display:flex;align-items:center;gap:8px;font-weight:400;margin:-16px 0 24px}
+.intake label.check input{display:inline;width:auto}
 .intake > .err{margin:-24px 0 16px}
 
 @media (max-width:720px){
