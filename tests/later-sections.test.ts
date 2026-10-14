@@ -15,7 +15,7 @@ import { ARITHMETIC_METHOD, UNCONFIRMED_METHOD, type EconomicsSection } from "..
 import { parseIdea, type IdeaSection } from "../lib/engine/sections/idea";
 import { laterContext } from "../lib/engine/sections/later";
 import { parseTests, type TestsSection } from "../lib/engine/sections/tests";
-import { parseVerdict, verdictCheck, type VerdictSection } from "../lib/engine/sections/verdict";
+import { parseVerdict, verdictCheck, verdictLimits, verdictPrompt, type VerdictSection } from "../lib/engine/sections/verdict";
 
 const src = (id: string) => ({ id, url: `https://${id.toLowerCase()}.example`, title: `Page ${id}`, retrieved_at: "2026-10-12T00:00:00.000Z", excerpt: `Quote from ${id}` });
 const store: SourceStore = ["S1", "S2", "S3", "S4", "S5", "S6"].map(src);
@@ -292,5 +292,48 @@ describe("verdict", () => {
     // The arithmetic is one entry whether Economics or Distribution cites it.
     expect(report.sources.filter((s) => s.text === `Estimate. ${ARITHMETIC_METHOD}`)).toHaveLength(1);
     expect(reportBrief(report)).toContain("## Verdict");
+  });
+});
+
+describe("verdict with no weak row", () => {
+  // The same idea with better evidence: two demand signals (not thin), and every row strong or mixed.
+  const solid: DemandSection = {
+    signals: [demand.signals[0], { kind: "search", signal: "Local searches", rating: "strong", value: "1,900", detail: found("monthly searches for dog grooming in Halifax", "S5") }],
+    evidence: "mixed",
+    scorecard: { rating: "mixed", headline: "1,900", unit: "searches/mo", finding: "Steady local searches; reviews for one groomer." },
+  };
+  const drafts: Partial<Drafts> = {
+    alternatives, demand_evidence: solid, economics: { ...economics, scorecard: { rating: "mixed", finding: "Fair margin; break-even needs a full calendar." } },
+    idea, distribution, blockers, riskiest_assumptions: assumptions, next_tests: tests,
+  };
+  const round4 = laterContext(spec, store, drafts, "CONTEXT");
+  const pursue: VerdictSection = { ...verdict, call: "pursue", confidence: "medium", summary: "Salons are the only alternative, nobody comes to the door, and owners ask for groomers in local groups." };
+
+  it("leaves every call open, so the verdict can be pursue", () => {
+    expect(Object.values(round4.report.scorecard!).map((r) => r!.rating)).not.toContain("weak");
+    expect(verdictLimits(round4)).toEqual({ noPursue: null, noHigh: null });
+    expect(verdictPrompt(round4)).toContain("Every call is open.");
+    expect(parseVerdict(structuredClone(pursue), round4)).toEqual(pursue);
+  });
+
+  it.each([
+    ["alternatives", { alternatives: { ...alternatives, scorecard: { ...alternatives.scorecard, rating: "weak" as const } } }],
+    ["demand_evidence", { demand_evidence: { ...solid, scorecard: { ...solid.scorecard, rating: "weak" as const } } }],
+    ["economics", { economics: { ...economics, scorecard: { ...economics.scorecard, rating: "weak" as const } } }],
+    ["distribution", { distribution: { ...distribution, scorecard: { ...distribution.scorecard, rating: "weak" as const } } }],
+    ["blockers", { blockers: { ...blockers, scorecard: { ...blockers.scorecard, rating: "weak" as const } } }],
+  ])("still refuses pursue when %s is weak", (name, change) => {
+    const weak = laterContext(spec, store, { ...drafts, ...change }, "CONTEXT");
+    expect(() => parseVerdict(structuredClone(pursue), weak)).toThrow(new RegExp(`pursue.*rated weak: ${name}`));
+  });
+
+  it("still takes the riskiest assumption from the lowest-rated rows", () => {
+    const round2 = laterContext(spec, store, { ...drafts, riskiest_assumptions: undefined, next_tests: undefined }, "CONTEXT");
+    expect(weakestSections(round2)).not.toContain("distribution");
+    expect(weakestSections(round2)).toContain("demand_evidence");
+    expect(parseAssumptions(structuredClone(assumptions), round2)).toEqual(assumptions);
+    const wrong = structuredClone(assumptions);
+    wrong.assumptions.reverse();
+    expect(() => parseAssumptions(wrong, round2)).toThrow(/rests_on: the riskiest assumption must rest on the weakest evidence/);
   });
 });

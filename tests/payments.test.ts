@@ -318,6 +318,68 @@ describe("refunds", () => {
   });
 });
 
+describe("re-run from saved answers", () => {
+  const owner = newOwnerToken();
+  /** A failed row this browser owns, paid and refunded unless overridden. */
+  const failedRow = (row: { payment_intent?: string | null; refunded_at?: string | null } = {}) => {
+    const r = rowDb({ status: "failed", payment_intent: "pi_1", refunded_at: "now", ...row });
+    const base = respond;
+    respond = (t, v) => (t.startsWith("SELECT status, idea, report")
+      ? [{ status: r.status, idea: "Van", report: null, error: "boom", payment_intent: r.payment_intent, refunded_at: r.refunded_at, owner_token_hash: owner.hash }]
+      : base(t, v));
+    return r;
+  };
+  const writes = () => queries.filter((q) => q.text.startsWith("UPDATE"));
+
+  it("is free for the admin cookie: the row is queued and the run starts after the response", async () => {
+    const row = failedRow();
+    jar.set("td_admin", adminCookieValue());
+    await expect(rerunTeardown("abc")).rejects.toBeInstanceOf(Redirect);
+    expect(row.status).toBe("queued");
+    expect(after).toHaveBeenCalledOnce();
+    expect(sessions).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["refunded", { refunded_at: "now" }],
+    ["paid, refund pending", { refunded_at: null }],
+  ])("is refused for the owner cookie on a %s run: nothing is queued, run or charged", async (_, row) => {
+    const r = failedRow(row);
+    jar.set(ownerCookie("abc"), owner.token);
+    await expect(rerunTeardown("abc")).rejects.toBeInstanceOf(NotFound);
+    expect(r.status).toBe("failed");
+    expect(writes()).toEqual([]);
+    expect(after).not.toHaveBeenCalled();
+    expect(sessions).not.toHaveBeenCalled();
+    expect(refunds).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no cookie", () => {}],
+    ["another teardown's owner cookie", () => jar.set(ownerCookie("other"), owner.token)],
+    ["a forged admin cookie", () => jar.set("td_admin", "s3cret")],
+  ])("is refused for a stranger with %s", async (_, setup) => {
+    const r = failedRow();
+    setup();
+    await expect(rerunTeardown("abc")).rejects.toBeInstanceOf(NotFound);
+    expect(r.status).toBe("failed");
+    expect(writes()).toEqual([]);
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("shows the button to the admin only, never to the owner", async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://mock");
+    failedRow();
+    const render = async () => (await TeardownPage({ params: Promise.resolve({ id: "abc" }) })) as { type: { name: string }; props: { admin?: unknown } };
+    jar.set(ownerCookie("abc"), owner.token);
+    const asOwner = await render();
+    expect(asOwner.type.name).toBe("Cooking");
+    expect(asOwner.props.admin).toBeUndefined();
+    jar.set("td_admin", adminCookieValue());
+    expect((await render()).props.admin).toEqual({ error: "boom" });
+  });
+});
+
 describe("who can see a teardown", () => {
   beforeEach(() => vi.stubEnv("DATABASE_URL", "postgres://mock"));
   const owner = newOwnerToken();

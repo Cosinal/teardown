@@ -1,7 +1,7 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { IntakeInput } from "./input";
-import { BILLING } from "./input";
+import { BILLING, BILLING_LABEL } from "./input";
 import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
 
 export const INTAKE_PROMPT = "intake.v2";
@@ -58,11 +58,10 @@ export function parseIdeaSpec(input: unknown): IdeaSpec {
 
 /** Renders the form input as the user message. Missing optional fields are stated, not dropped. */
 export function formatInput(input: IntakeInput): string {
-  const billing = { one_time: "one-time", subscription: "subscription", other: "other" }[input.billing];
   return [
     `Idea: ${input.idea}`,
     `Target customer: ${input.target_customer}`,
-    `Price: ${input.price} (${billing})`,
+    `Price: ${input.price} (${BILLING_LABEL[input.billing]})`,
     `Geography: ${input.geography}`,
     `Known competitors: ${input.known_competitors ?? "(not given)"}`,
     `Biggest worry: ${input.biggest_worry ?? "(not given)"}`,
@@ -86,6 +85,8 @@ export async function runIntake(
   assertFinished(msg, "intake");
   if (!msg.parsed_output) throw new Error("intake: no structured output");
   const spec = parseIdeaSpec(msg.parsed_output);
+  // The founder's price and billing are taken as entered, never as intake restated them.
+  spec.revenue_model = { ...spec.revenue_model, price: input.price, billing: input.billing };
   const usage = addUsage(ZERO_USAGE, msg.usage);
   return {
     spec,
