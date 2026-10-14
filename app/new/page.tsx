@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
+// The submit action runs the engine after its response (app/new/actions.ts),
+// and a server action takes its time limit from the page. A report takes a few minutes.
+export const maxDuration = 800;
+
 // Gated behind ADMIN_KEY until /privacy and /data cover intake data (see CLAUDE.md).
 // Unlock once with /new?key=ADMIN_KEY (proxy.ts sets the cookie).
 export default async function NewTeardown() {
