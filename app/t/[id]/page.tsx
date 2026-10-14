@@ -107,7 +107,7 @@ function Cooking({ id, t, admin }: { id: string; t: Waiting; admin?: { error: st
       : failed && paid
         ? ["Stopped", "Something went wrong with this teardown.", "Your payment will be refunded in full."]
         : failed
-          ? ["Stopped", "Something went wrong with this teardown.", "Your answers are saved, so the teardown can be rerun without asking you again."]
+          ? ["Stopped", "Something went wrong with this teardown.", "Please submit your idea again from the start."]
           : ["In the kitchen", "Your teardown is cooking.", "We’re researching the market for your idea. This page refreshes on its own; you can also come back to this link later."];
   return (
     <div className="td-doc">
