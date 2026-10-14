@@ -105,7 +105,7 @@ function Cooking({ id, t, admin }: { id: string; t: Waiting; admin?: { error: st
     : failed && refunded
       ? ["Stopped", "Something went wrong, you’ve been refunded.", "Your payment has been refunded in full. It can take 5–10 business days to reach your account."]
       : failed && paid
-        ? ["Stopped", "Something went wrong with this teardown.", "Your payment will be refunded in full. Your answers are saved, so the teardown can be rerun without asking you again."]
+        ? ["Stopped", "Something went wrong with this teardown.", "Your payment will be refunded in full."]
         : failed
           ? ["Stopped", "Something went wrong with this teardown.", "Your answers are saved, so the teardown can be rerun without asking you again."]
           : ["In the kitchen", "Your teardown is cooking.", "We’re researching the market for your idea. This page refreshes on its own; you can also come back to this link later."];

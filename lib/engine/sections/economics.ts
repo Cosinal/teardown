@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CheckClaim, Fixed, SectionCheck } from "../factcheck";
 import type { IdeaSpec } from "../intake";
+import { BILLING_LABEL, type IntakeInput } from "../input";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { SOURCE_BUDGETS, buildPartialReport } from "../report";
 import type { SourceStore } from "../research";
@@ -13,10 +14,11 @@ import { SECTIONS } from "./config";
 // Gross margin and break-even are never written by the model: code computes
 // them from the inputs that survive fact-check and writes out the arithmetic,
 // tagged as an estimate with one fixed method. Every part that holds a figure
-// must cite a source or give an estimate method.
+// must cite a source or give an estimate method. The price is the founder's,
+// as entered on the form: the writer may not swap in another.
 
 export const ECONOMICS_RESEARCH_PROMPT = "economics-research.v1";
-export const ECONOMICS_WRITE_PROMPT = "economics-write.v1";
+export const ECONOMICS_WRITE_PROMPT = "economics-write.v2";
 
 /** The method behind every computed figure. */
 export const ARITHMETIC_METHOD = "Arithmetic on the price, unit cost and fixed costs in Economics";
@@ -73,6 +75,30 @@ export function computeEconomics(s: Pick<EconomicsSection, "price" | "unit_cost"
   };
 }
 
+/** The founder's price from the form. `amount` is null when code can't read one figure (or range) from it. */
+export type FounderPrice = { text: string; billing: IntakeInput["billing"]; amount: number | null; range: boolean };
+
+const FIGURE = /(\d[\d,]*(?:\.\d+)?)\s*([KkMm](?![A-Za-z]))?/g;
+
+/**
+ * The amount in the founder's price: 40 from "$40/session", 2000 from
+ * "$2,000/month", the midpoint 7.5 from "$5–10 per report". Null with no
+ * figure, or with more than one that isn't a range ("$40, or 4 for $150"):
+ * the writer then reads the price itself and nothing is enforced.
+ */
+export function founderPrice({ price, billing }: Pick<IntakeInput, "price" | "billing">): FounderPrice {
+  const m = [...price.matchAll(FIGURE)];
+  const value = (x: RegExpExecArray) => Number(x[1].replace(/,/g, "")) * (x[2] ? (x[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1);
+  let amount: number | null = null;
+  let range = false;
+  if (m.length === 1) amount = value(m[0]);
+  if (m.length === 2 && /^\s*(?:-|–|—|to)\s*[^\d\s]?\s*$/i.test(price.slice(m[0].index + m[0][0].length, m[1].index))) {
+    amount = (value(m[0]) + value(m[1])) / 2;
+    range = true;
+  }
+  return { text: price, billing, amount: amount !== null && amount > 0 && Number.isFinite(amount) ? amount : null, range };
+}
+
 type FigureParts = { value: string; label: string; note: Part[] };
 
 /** The section as report fields, still citing SourceStore ids. report.ts numbers them. */
@@ -125,7 +151,7 @@ export function economicsReport(s: EconomicsSection) {
  * Checks the writer's JSON against the section rules. Throws with a message
  * that names the field, so the writer can be told what to fix.
  */
-export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SOURCE_BUDGETS.economics): EconomicsSection {
+export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SOURCE_BUDGETS.economics, price?: FounderPrice): EconomicsSection {
   const section = EconomicsSchema.parse(raw);
   const ids = new Set(store.map((s) => s.id));
   const cited = new Set<string>([`estimate:${ARITHMETIC_METHOD}`]);
@@ -152,6 +178,9 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
     });
   }
   if (section.price.amount <= 0) throw new Error("price.amount: must be more than 0");
+  if (price?.amount != null && Math.abs(section.price.amount - price.amount) > 0.005) {
+    throw new Error(`price.amount: ${section.price.amount}, but the founder's price is "${price.text}", so it must be ${price.amount}`);
+  }
   if (section.price.amount >= 1e9 || section.fixed_costs.amount >= 1e9) throw new Error("amounts: under 1 billion");
   if (!/^[A-Z]{3}$/.test(section.currency)) throw new Error("currency: a three-letter ISO code, e.g. USD");
   if (!section.per.trim() || section.per.length > 20) throw new Error("per: 1 to 20 characters");
@@ -163,8 +192,8 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
 }
 
 /** Validates against the section rules and, through a report build, the page limits. */
-function parseForReport(raw: unknown, store: SourceStore, maxSources: number): EconomicsSection {
-  const section = parseEconomics(raw, store, maxSources);
+function parseForReport(raw: unknown, store: SourceStore, maxSources: number, price?: FounderPrice): EconomicsSection {
+  const section = parseEconomics(raw, store, maxSources, price);
   buildPartialReport({ economics: section }, store);
   return section;
 }
@@ -219,10 +248,19 @@ export function economicsCheck(store: SourceStore, maxSources = SOURCE_BUDGETS.e
   };
 }
 
+/** How the prompt states the founder's price. Without one (callers that have only the spec), the spec's. */
+function priceRule(price?: FounderPrice): string {
+  const midpoint = "If it gives a range, use its midpoint and say so in an estimated part.";
+  if (!price) return `the price in the spec. ${midpoint}`;
+  const stated = `the founder entered "${price.text}" (${BILLING_LABEL[price.billing]}).`;
+  if (price.amount === null) return `${stated} ${midpoint}`;
+  return `${stated} So \`price.amount\` is ${price.amount}${price.range ? ", the midpoint of that range; say so in an estimated part" : ""}.`;
+}
+
 /** The section's own instructions, after the shared writer context. */
-export function economicsPrompt(maxSources = SOURCE_BUDGETS.economics): string {
+export function economicsPrompt(maxSources = SOURCE_BUDGETS.economics, price?: FounderPrice): string {
   // The arithmetic is always cited, so the writer's own share is one less.
-  return loadPrompt(ECONOMICS_WRITE_PROMPT).replaceAll("{{own_sources}}", String(maxSources - 1));
+  return loadPrompt(ECONOMICS_WRITE_PROMPT).replaceAll("{{own_sources}}", String(maxSources - 1)).replaceAll("{{founder_price}}", priceRule(price));
 }
 
 /** The section's own searches, merged into the store. */
@@ -235,14 +273,18 @@ export function researchEconomics(spec: IdeaSpec, store: SourceStore, notes: str
   });
 }
 
-/** Writes the section from the shared writer context. `store` must be the store the context was built from. */
-export function writeEconomics(context: string, store: SourceStore, options: SectionOptions = {}) {
+/**
+ * Writes the section from the shared writer context. `store` must be the store
+ * the context was built from. With `price`, a draft whose price.amount isn't the
+ * founder's is sent back to the writer.
+ */
+export function writeEconomics(context: string, store: SourceStore, options: SectionOptions = {}, price?: FounderPrice) {
   const maxSources = SOURCE_BUDGETS.economics;
   return runWriter("economics", {
     model: options.model ?? STAGE_MODELS.economics,
     context,
-    sectionPrompt: economicsPrompt(maxSources),
+    sectionPrompt: economicsPrompt(maxSources, price),
     promptVersion: ECONOMICS_WRITE_PROMPT,
-    parse: (json) => parseForReport(json, store, maxSources),
+    parse: (json) => parseForReport(json, store, maxSources, price),
   });
 }

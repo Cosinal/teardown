@@ -9,6 +9,8 @@ const optional = (label: string, max: number) =>
   z.string().trim().max(max, `${label} must be ${max} characters or fewer.`).transform((s) => s || undefined).optional();
 
 export const BILLING = ["one_time", "subscription", "other"] as const;
+/** How each billing type is written in prompts. */
+export const BILLING_LABEL: Record<(typeof BILLING)[number], string> = { one_time: "one-time", subscription: "subscription", other: "other" };
 export const STAGES = ["idea", "building", "launched"] as const;
 
 export const IntakeInputSchema = z.object({

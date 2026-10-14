@@ -13,7 +13,7 @@ import { WriterError, mergeResearch, searchSection, writerContext, type Revision
 import { SECTIONS } from "./sections/config";
 import { DEMAND_RESEARCH_PROMPT, demandCheck, writeDemand, type DemandSection } from "./sections/demand";
 import { distributionCheck, writeDistribution, type DistributionSection } from "./sections/distribution";
-import { ECONOMICS_RESEARCH_PROMPT, economicsCheck, writeEconomics, type EconomicsSection } from "./sections/economics";
+import { ECONOMICS_RESEARCH_PROMPT, economicsCheck, founderPrice, writeEconomics, type EconomicsSection } from "./sections/economics";
 import { ideaCheck, ideaSource, writeIdea, type IdeaSection } from "./sections/idea";
 import { laterContext } from "./sections/later";
 import { testsCheck, writeTests, type TestsSection } from "./sections/tests";
@@ -151,7 +151,7 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   await record(altWrite.run);
   const [demandWrite, econWrite] = await Promise.all([
     writeDemand(context, sources, options.demand_evidence),
-    writeEconomics(context, sources, options.economics),
+    writeEconomics(context, sources, options.economics, founderPrice(input)),
   ]);
   await record(demandWrite.run);
   await record(econWrite.run);
