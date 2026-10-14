@@ -34,12 +34,32 @@ export function newTeardownId() {
   return randomBytes(9).toString("base64url");
 }
 
-export async function createTeardown(input: IntakeInput): Promise<string> {
+/**
+ * Saves a new teardown as awaiting_payment, owned by whoever holds the token
+ * that hashes to `ownerTokenHash` (null: admin only). The Stripe webhook (or an admin skipping
+ * payment) moves it to queued.
+ */
+export async function createTeardown(input: IntakeInput, ownerTokenHash: string | null): Promise<string> {
   await init();
   const id = newTeardownId();
-  await sql()`INSERT INTO teardowns (id, idea, report, prompt_version, status, input)
-    VALUES (${id}, ${input.idea}, NULL, ${PIPELINE_VERSION}, 'queued', ${JSON.stringify(input)}::jsonb)`;
+  await sql()`INSERT INTO teardowns (id, idea, report, prompt_version, status, input, owner_token_hash)
+    VALUES (${id}, ${input.idea}, NULL, ${PIPELINE_VERSION}, 'awaiting_payment', ${JSON.stringify(input)}::jsonb, ${ownerTokenHash})`;
   return id;
+}
+
+/** Replaces the answers on a teardown that hasn't been paid for yet. Returns false if it's no longer awaiting payment. */
+export async function updateDraft(id: string, input: IntakeInput): Promise<boolean> {
+  await init();
+  const rows = await sql()`UPDATE teardowns SET idea = ${input.idea}, input = ${JSON.stringify(input)}::jsonb, updated_at = now()
+    WHERE id = ${id} AND status = 'awaiting_payment' RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Admin only: queues an unpaid teardown without payment. Returns false if it's no longer awaiting payment. */
+export async function skipPayment(id: string): Promise<boolean> {
+  const rows = await sql()`UPDATE teardowns SET status = 'queued', updated_at = now()
+    WHERE id = ${id} AND status = 'awaiting_payment' RETURNING id`;
+  return rows.length > 0;
 }
 
 async function setStatus(id: string, status: TeardownStatus, error: string | null = null) {
@@ -48,9 +68,9 @@ async function setStatus(id: string, status: TeardownStatus, error: string | nul
 
 /** Saved on a run that stopped updating its row, e.g. killed at maxDuration or cut off from the database. */
 export const STALE_RUN_ERROR = "Run timed out or lost connection";
-const SETTLED: TeardownStatus[] = ["queued", "done", "failed"];
+const SETTLED: TeardownStatus[] = ["awaiting_payment", "queued", "done", "failed"];
 
-/** True for a status a live run passes through: not waiting, finished or failed. */
+/** True for a status a live run passes through: not waiting (for payment or to start), finished or failed. */
 export function isInProgress(status: TeardownStatus) {
   return !SETTLED.includes(status);
 }
@@ -63,7 +83,7 @@ export function isInProgress(status: TeardownStatus) {
  */
 export async function failStaleRun(id: string): Promise<boolean> {
   const rows = await sql()`UPDATE teardowns SET status = 'failed', error = ${STALE_RUN_ERROR}, updated_at = now()
-    WHERE id = ${id} AND status NOT IN ('queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes'
+    WHERE id = ${id} AND status NOT IN ('awaiting_payment', 'queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes'
     RETURNING id`;
   return rows.length > 0;
 }

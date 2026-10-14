@@ -1,12 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import { submitIdea, type FormState } from "@/app/new/actions";
+import { submitIdea } from "@/app/new/actions";
 
-const INITIAL: FormState = { errors: {}, values: {} };
-
-export default function IntakeForm() {
-  const [state, action, pending] = useActionState(submitIdea, INITIAL);
+/**
+ * `values` prefills the answers (back from a cancelled checkout, with `draft`
+ * set to that teardown's id). `admin` shows the skip-payment checkbox.
+ */
+export default function IntakeForm({ values = {}, admin = false }: { values?: Record<string, string>; admin?: boolean }) {
+  const [state, action, pending] = useActionState(submitIdea, { errors: {}, values });
   const v = state.values;
   const err = (name: string) => state.errors[name] && <p className="err" id={`${name}-err`}>{state.errors[name]}</p>;
   const aria = (name: string) => (state.errors[name] ? { "aria-invalid": true, "aria-describedby": `${name}-err` } : {});
@@ -71,6 +73,12 @@ export default function IntakeForm() {
         {err("stage")}
       </fieldset>
 
+      {v.draft && <input type="hidden" name="draft" value={v.draft} />}
+      {admin && (
+        <label className="check">
+          <input type="checkbox" name="skip_payment" defaultChecked={v.idea === undefined || v.skip_payment === "on"} /> Admin: skip payment
+        </label>
+      )}
       {err("form")}
       <button type="submit" disabled={pending}>{pending ? "Saving…" : "Start teardown"}</button>
     </form>

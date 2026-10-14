@@ -33,7 +33,7 @@ import { demandCheck } from "../lib/engine/sections/demand";
 import { distributionCheck } from "../lib/engine/sections/distribution";
 import { economicsCheck } from "../lib/engine/sections/economics";
 import { laterContext } from "../lib/engine/sections/later";
-import { createTeardown, dbPageCache, runStages } from "../lib/engine/store";
+import { createTeardown, dbPageCache, runStages, skipPayment } from "../lib/engine/store";
 
 try {
   process.loadEnvFile(".env.local");
@@ -100,7 +100,9 @@ const useDb = !process.argv.includes("--no-db") && !!process.env.DATABASE_URL;
 /** Runs one idea. Its page cache is returned so the verify pass reuses the fetched pages. */
 async function run(input: IntakeInput): Promise<StagesResult & { id: string | null; pages: PageCache }> {
   if (useDb) {
-    const id = await createTeardown(input);
+    // A dev run is unpaid and has no owner: only the admin cookie can view it.
+    const id = await createTeardown(input, null);
+    await skipPayment(id);
     return { id, pages: dbPageCache(id), ...(await runStages(id, options)) };
   }
   const pages = memoryPageCache();

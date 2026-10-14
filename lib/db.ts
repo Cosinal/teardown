@@ -49,6 +49,12 @@ export function init() {
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
     // Written report sections keyed by name, e.g. {"alternatives": {...}}, citing source ids.
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '{}'`;
+    // Payments: the Stripe payment intent that paid for the run, when it was
+    // refunded (set once, so a failed run is never refunded twice), and the
+    // sha256 of the owner cookie's token. All null on rows from before payments.
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS payment_intent TEXT`;
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ`;
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS owner_token_hash TEXT`;
     await q`CREATE TABLE IF NOT EXISTS sources (
       teardown_id TEXT NOT NULL REFERENCES teardowns(id),
       source_id TEXT NOT NULL,

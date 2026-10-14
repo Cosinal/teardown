@@ -29,8 +29,15 @@ vi.mock("../lib/engine/pipeline", () => ({ runPipeline: (...args: unknown[]) => 
 
 const after = vi.fn();
 vi.mock("next/server", () => ({ after: (fn: () => unknown) => after(fn) }));
+/** The admin cookie's value; other cookies are ignored here (see tests/payments.test.ts). */
 const cookie = { value: undefined as string | undefined };
-vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => (cookie.value === undefined ? undefined : { value: cookie.value }) }) }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (name === "td_admin" && cookie.value !== undefined ? { value: cookie.value } : undefined),
+    set: () => {},
+  }),
+  headers: async () => new Headers({ origin: "https://teardown.test" }),
+}));
 class Redirect extends Error {}
 class NotFound extends Error {}
 vi.mock("next/navigation", () => ({
@@ -154,14 +161,18 @@ describe("admin submit", () => {
     return f;
   };
 
-  it("queues the row, schedules startRun after the response, and redirects at once", async () => {
+  it("skipping payment queues the row, schedules startRun after the response, and redirects at once", async () => {
     vi.stubEnv("ADMIN_KEY", "s3cret");
     cookie.value = adminCookieValue();
-    const err = await submitIdea({ errors: {}, values: {} }, form(INPUT)).catch((e) => e);
+    respond = (t) => (t.startsWith("UPDATE teardowns SET status = 'queued'") ? [{ id: "x" }] : []);
+    const err = await submitIdea({ errors: {}, values: {} }, form({ ...INPUT, skip_payment: "on" })).catch((e) => e);
     expect(err).toBeInstanceOf(Redirect);
     const insert = queries.find((q) => q.text.startsWith("INSERT INTO teardowns"));
-    expect(insert?.text).toContain("'queued'");
+    expect(insert?.text).toContain("'awaiting_payment'");
     const id = insert!.values[0];
+    const queue = queries.find((q) => q.text.startsWith("UPDATE teardowns SET status = 'queued'"));
+    expect(queue?.text).toContain("status = 'awaiting_payment'");
+    expect(queue?.values).toEqual([id]);
     expect(err.message).toBe(`/t/${id}`);
     expect(after).toHaveBeenCalledOnce();
     // Scheduled, not run: nothing has claimed the row yet.
@@ -212,13 +223,13 @@ describe("admin re-run", () => {
 describe("stale-run sweep", () => {
   const staleSql = (t: string) => t.startsWith("UPDATE teardowns SET status = 'failed'");
   const page = async (id: string) =>
-    (await TeardownPage({ params: Promise.resolve({ id }) })) as { props: { status: string; admin?: { error: string | null } } };
+    (await TeardownPage({ params: Promise.resolve({ id }) })) as { props: { t: { status: string }; admin?: { error: string | null } } };
 
   it("fails an in-progress row only if the database says it's 6 minutes stale", async () => {
     respond = (t) => (staleSql(t) ? [{ id: "abc" }] : []);
     expect(await failStaleRun("abc")).toBe(true);
     expect(queries[0].text).toBe(
-      "UPDATE teardowns SET status = 'failed', error = $, updated_at = now() WHERE id = $ AND status NOT IN ('queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes' RETURNING id",
+      "UPDATE teardowns SET status = 'failed', error = $, updated_at = now() WHERE id = $ AND status NOT IN ('awaiting_payment', 'queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes' RETURNING id",
     );
     expect(queries[0].values).toEqual(["Run timed out or lost connection", "abc"]);
   });
@@ -230,7 +241,7 @@ describe("stale-run sweep", () => {
   describe("on /t/[id]", () => {
     beforeEach(() => vi.stubEnv("DATABASE_URL", "postgres://mock"));
     const row = (status: string) => (t: string) => {
-      if (t.startsWith("SELECT status, idea, report, error")) return [{ status, idea: "Bike repair van", report: null, error: null }];
+      if (t.startsWith("SELECT status, idea, report, error")) return [{ status, idea: "Bike repair van", report: null, error: null, owner_token_hash: null }];
       return staleSql(t) ? [{ id: "abc" }] : [];
     };
 
@@ -240,29 +251,33 @@ describe("stale-run sweep", () => {
       respond = row("factcheck");
       const el = await page("abc");
       expect(queries.some((q) => staleSql(q.text))).toBe(true);
-      expect(el.props.status).toBe("failed");
+      expect(el.props.t.status).toBe("failed");
       expect(el.props.admin?.error).toBe(STALE_RUN_ERROR);
     });
 
-    it("the public page shows failed without the error", async () => {
+    it("sweeps a stale run even when the viewer can't see it", async () => {
       respond = row("writing");
       const el = await page("abc");
-      expect(el.props.status).toBe("failed");
-      expect(el.props.admin).toBeUndefined();
+      expect(queries.some((q) => staleSql(q.text))).toBe(true);
+      expect(el.props.t).toBeUndefined();
     });
 
     it("a fresh in-progress run keeps cooking", async () => {
+      vi.stubEnv("ADMIN_KEY", "s3cret");
+      cookie.value = adminCookieValue();
       respond = (t) => (staleSql(t) ? [] : row("research")(t));
       const el = await page("abc");
       expect(queries.some((q) => staleSql(q.text))).toBe(true);
-      expect(el.props.status).toBe("research");
+      expect(el.props.t.status).toBe("research");
     });
 
-    it.each(["queued", "failed"])("a %s row is never swept", async (status) => {
+    it.each(["awaiting_payment", "queued", "failed"])("a %s row is never swept", async (status) => {
+      vi.stubEnv("ADMIN_KEY", "s3cret");
+      cookie.value = adminCookieValue();
       respond = row(status);
       const el = await page("abc");
       expect(queries.some((q) => staleSql(q.text))).toBe(false);
-      expect(el.props.status).toBe(status);
+      expect(el.props.t.status).toBe(status);
     });
   });
 });

@@ -8,7 +8,7 @@ Teardown turns a business idea into a one-page market readout: competitors (dire
 
 - Next.js App Router + TypeScript, deployed on Vercel.
 - Neon Postgres via `@neondatabase/serverless` (`lib/db.ts`). Table `signups`: `email` (unique), `created_at`, `consent`, `policy_version`, `ref` (nullable).
-- Env: `DATABASE_URL`, `ADMIN_KEY` (see `.env.example`). Never commit secrets.
+- Env: `DATABASE_URL`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` (see `.env.example`). Use Stripe test keys outside production. Never commit secrets.
 
 ## Conventions
 
@@ -16,7 +16,7 @@ Teardown turns a business idea into a one-page market readout: competitors (dire
 - Schema changes must be additive and idempotent (`ADD COLUMN IF NOT EXISTS`). Never drop or rewrite signup data.
 - Collecting any new personal data requires updating `/privacy` and `/data` and bumping `POLICY_VERSION` in `lib/db.ts`.
 - Fonts are self-hosted Inter in `public/fonts/`. Don't switch to `next/font` on the existing pages: it changes metrics.
-- `/new` (the intake form) is gated behind `ADMIN_KEY` until `/privacy` and `/data` cover intake data: open `/new?key=ADMIN_KEY` once to set a cookie; without it the page and its server action return 404 (`lib/admin.ts`, `proxy.ts`). Remove the gate only together with the policy update.
+- `/new` (the intake form) is gated behind `ADMIN_KEY` until `/privacy` and `/data` cover intake and payment data (the Stripe payment, the per-teardown owner cookie): open `/new?key=ADMIN_KEY` once to set a cookie; without it the page and its server action return 404 (`lib/admin.ts`, `proxy.ts`). Remove the gate only together with the policy update.
 - Engine models are set per stage in `STAGE_MODELS` (`lib/engine/llm.ts`). Every model used needs a row in `PRICES` there.
 - `npm run test:ideas` writes raw output to `tests/runs/` (gitignored). Record the per-idea counts and costs in `tests/runs-summary.md`.
 - Run `npm run typecheck` and `npm run build` before considering work done.

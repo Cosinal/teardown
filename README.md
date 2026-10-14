@@ -34,6 +34,9 @@ Engine dev run (billable, needs `ANTHROPIC_API_KEY`): `npm run test:ideas` runs 
 | `DATABASE_URL` | Neon Postgres connection string. |
 | `ADMIN_KEY` | Secret for the admin endpoints below. Admin access is disabled if unset. |
 | `ANTHROPIC_API_KEY` | Claude API key for the teardown engine. Only the engine needs it; the site runs without it. |
+| `STRIPE_SECRET_KEY` | Stripe secret key (`sk_test_...` outside production): Checkout Sessions and refunds. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret (`whsec_...`) of the Stripe webhook endpoint for `/api/stripe/webhook`. |
+| `STRIPE_PRICE_ID` | The one-time Stripe Price a teardown is sold at. |
 
 Never commit `.env*` files. Only `.env.example` is tracked.
 
@@ -43,8 +46,9 @@ Never commit `.env*` files. Only `.env.example` is tracked.
 | --- | --- |
 | `/` | Waitlist landing page. `?ref=<code>` is stored with the signup. |
 | `/privacy`, `/data` | Privacy Policy and Data Policy. |
-| `/new` | Intake form. Validates with zod, inserts a `queued` teardown and redirects to `/t/[id]`. It does not run the engine (billable; waits for payment). |
-| `/t/[id]` | The report, or a "cooking" page (refreshes every 15s) while the teardown has no report. `/t/sample` is the design fixture. |
+| `/new` | Intake form (admin-gated). Saves the teardown as `awaiting_payment`, sets its owner cookie and redirects to Stripe Checkout. An admin can tick "skip payment" to queue and run it directly. `?draft=<id>` (Checkout's cancel URL) refills the answers. |
+| `/t/[id]` | The report, or a waiting/cooking page (refreshes every 15s) while the teardown has no report. Only its owner cookie or the admin cookie can see it; everyone else gets a "private" page. `/t/sample` is the design fixture and public. |
+| `POST /api/stripe/webhook` | Stripe events, signature-checked. `checkout.session.completed` saves the payment intent, queues the teardown once, and starts the run. |
 | `GET /api/count` | `{ "count": n }`: the total number of signups and nothing else. Polled every 4s by the home page. |
 | `POST /api/subscribe` | `{ email, consent: true, ref? }`. Returns 400 for an invalid email or missing consent, 409 for a duplicate. |
 | `GET /api/subscribe?key=ADMIN_KEY` | Admin: list all signups. |
