@@ -62,7 +62,7 @@ const context = writerContext(spec, store, [{ label: "Shared research", text: "S
 
 /** Which writer a request is for, from its section prompt. */
 function section(p: Params): "warm" | "alternatives" | "demand_evidence" | "economics" {
-  if (p.max_tokens === 1) return "warm";
+  if (p.max_tokens === 0) return "warm";
   const prompt = p.system.at(-1)!.text;
   if (prompt.startsWith("# Section: Existing Alternatives")) return "alternatives";
   if (prompt.startsWith("# Section: Demand Evidence")) return "demand_evidence";
@@ -134,7 +134,7 @@ describe("first three writers", () => {
     timedClient();
     await run();
     const sent = create.mock.calls.map((c) => c[0] as Params & { model: string; output_config: unknown });
-    const warm = sent.find((p) => p.max_tokens === 1)!;
+    const warm = sent.find((p) => p.max_tokens === 0)!;
     for (const p of sent) {
       expect(p.model).toBe(warm.model);
       expect(p.output_config).toEqual(warm.output_config);
@@ -217,7 +217,7 @@ describe("writer retries", () => {
 });
 
 describe("time budget", () => {
-  it("passes the hard deadline to every call, and caps a call at 60 s", () => {
+  it("passes the hard deadline to every call, and caps each attempt at 60 s", () => {
     expect(requestOptions()).toEqual({ timeout: 60_000 });
     expect(requestOptions(null)).toEqual({});
     const budget = new Budget(240_000, 275_000);

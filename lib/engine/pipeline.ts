@@ -113,7 +113,7 @@ async function together<P extends readonly Promise<{ run: StageRun }>[]>(record:
 
 /**
  * The three sections with their own research, written from the shared
- * context. A one-token call writes the context to the cache first, so all
+ * context. A call that generates nothing writes the context to the cache first, so all
  * three start at once and read it. If that call fails, Existing Alternatives
  * is written first (writing the cache) and the other two after it, as before.
  */
@@ -140,7 +140,7 @@ export async function writeFirstSections(context: string, sources: SourceStore, 
  * Intake, shared research, the three searching sections' own research (all at
  * once, merged in a fixed order), their writers, then fact-check of each.
  * Every section's research finishes before any writer starts, so all writers
- * share one cached context: a one-token call writes it, then the three
+ * share one cached context: a call that generates nothing writes it, then the three
  * writers run at once and read it. Then the six sections with no research,
  * each from the same context plus the finished, fact-checked sections so far:
  * Idea, Distribution and Blockers together, then Riskiest Assumptions (ranked

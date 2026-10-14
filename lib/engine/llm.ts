@@ -241,7 +241,9 @@ export function currentBudget(): Budget | undefined {
 }
 
 /**
- * Cap on one non-search API call, retries by the SDK included in each try. The
+ * Cap on one attempt of a non-search API call. The SDK retries a timed-out
+ * attempt (twice by default), so a hung call costs 60 s and then usually
+ * succeeds on the next try; the run's hard deadline bounds the total. The
  * slowest normal writer call measured is about 25 s; a few calls took
  * 70-90 s (stage runs of 2026-10-13). Search calls get no cap of their own: a
  * timed-out search would be re-run and billed again.

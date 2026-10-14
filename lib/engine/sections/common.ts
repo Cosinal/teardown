@@ -22,10 +22,12 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
 const WRITER_EFFORT = "medium";
 /**
  * Writer calls allowed per section: the first, plus two retries that are told
- * what failed. One retry lost whole teardowns (tests/runs-summary.md); no
- * writer in the runs of 2026-10-13/14 needed more than two. A retry only
- * re-reads the cached context, and when the problem is one text field it asks
- * for that field alone (see runWriter), so it is short.
+ * what failed. One retry lost whole teardowns, and two lost two of three test
+ * runs on a one-character overrun (tests/runs-summary.md, 20-59-14) before the
+ * later prompts said to aim under each limit. Since then no writer in the five
+ * runs of 2026-10-13/14 needed more than two. Kept at two to keep runs under
+ * the time limit: a retry only re-reads the cached context, and when the
+ * problem is one text field it asks for that field alone (see runWriter).
  */
 export const WRITE_ATTEMPTS = 3;
 
@@ -174,16 +176,17 @@ export function writerParams(
 }
 
 /**
- * Writes the shared writer context to the cache with a one-token call, so the
+ * Writes the shared writer context to the cache with a call that generates
+ * nothing (max_tokens 0, as the cache probe in tests/runs-summary.md), so the
  * first three writers can start at once and all read it. Started together
  * without it, each would write the ~20k-token context itself. Same model,
  * effort and system blocks as every writer, so the prefix matches. The reply
- * is cut at max_tokens on purpose and not used.
+ * is empty and not used.
  */
 export async function warmWriterCache(model: string, context: string): Promise<StageRun> {
   const started = new Date();
   const msg = await anthropic().messages.create(
-    writerParams({ model, context, sectionPrompt: "Reply with OK." }, [{ role: "user", content: "OK?" }], 1),
+    writerParams({ model, context, sectionPrompt: "Reply with OK." }, [{ role: "user", content: "OK?" }], 0),
     requestOptions(),
   );
   const usage = addUsage(ZERO_USAGE, msg.usage);
