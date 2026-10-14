@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { IdeaSpec } from "../intake";
-import { ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type Stage, type StageRun } from "../llm";
+import { ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, requestOptions, type Stage, type StageRun } from "../llm";
 import {
   EXCERPT_MAX, buildSourceStore, normalizeUrl, notesText, searchLoop, searchParams,
   type SearchResponse, type Source, type SourceStore,
@@ -21,13 +21,13 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
  */
 const WRITER_EFFORT = "medium";
 /**
- * Writer calls allowed per section: the first, plus retries that are told what
- * failed. Three retries: writers miss character limits often enough that one
- * retry lost whole teardowns, and with nine writers per report two still lost
- * two of three test runs on a one-character overrun (tests/runs-summary.md).
- * A retry only re-reads the cached context.
+ * Writer calls allowed per section: the first, plus two retries that are told
+ * what failed. One retry lost whole teardowns (tests/runs-summary.md); no
+ * writer in the runs of 2026-10-13/14 needed more than two. A retry only
+ * re-reads the cached context, and when the problem is one text field it asks
+ * for that field alone (see runWriter), so it is short.
  */
-const WRITE_ATTEMPTS = 4;
+export const WRITE_ATTEMPTS = 3;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -173,6 +173,26 @@ export function writerParams(
   };
 }
 
+/**
+ * Writes the shared writer context to the cache with a one-token call, so the
+ * first three writers can start at once and all read it. Started together
+ * without it, each would write the ~20k-token context itself. Same model,
+ * effort and system blocks as every writer, so the prefix matches. The reply
+ * is cut at max_tokens on purpose and not used.
+ */
+export async function warmWriterCache(model: string, context: string): Promise<StageRun> {
+  const started = new Date();
+  const msg = await anthropic().messages.create(
+    writerParams({ model, context, sectionPrompt: "Reply with OK." }, [{ role: "user", content: "OK?" }], 1),
+    requestOptions(),
+  );
+  const usage = addUsage(ZERO_USAGE, msg.usage);
+  return {
+    stage: "alternatives", step: "warm", prompt_version: WRITER_SHARED_PROMPT, model: msg.model, usage,
+    cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+  };
+}
+
 /** The JSON object in a writer's reply, tolerating a code fence or a sentence around it. */
 export function parseJsonText(text: string): unknown {
   const start = text.indexOf("{");
@@ -186,6 +206,38 @@ export function parseJsonText(text: string): unknown {
 }
 
 export const WRITE_INSTRUCTION = "Write the section now. Reply with the JSON object only.";
+
+/**
+ * The field a validation problem names, e.g. "tests[0].description" from
+ * "tests[0].description: 68 characters, at most 64", or null.
+ */
+export function problemField(problem: string): string | null {
+  return problem.match(/^([A-Za-z_]\w*(?:\[\d+\]|\.[A-Za-z_]\w*)*): /)?.[1] ?? null;
+}
+
+function pathKeys(path: string): (string | number)[] {
+  return [...path.matchAll(/([A-Za-z_]\w*)|\[(\d+)\]/g)].map((m) => (m[2] === undefined ? m[1] : Number(m[2])));
+}
+
+/** The string at `path` in `json`, or undefined if there is none. */
+export function stringAt(json: unknown, path: string): string | undefined {
+  let v: unknown = json;
+  for (const k of pathKeys(path)) {
+    if (typeof v !== "object" || v === null) return undefined;
+    v = (v as Record<string | number, unknown>)[k];
+  }
+  return typeof v === "string" ? v : undefined;
+}
+
+/** A copy of `json` with the string at `path` replaced. The path must hold a string (see stringAt). */
+export function withString(json: unknown, path: string, value: string): unknown {
+  const copy = structuredClone(json);
+  const keys = pathKeys(path);
+  let v = copy as Record<string | number, unknown>;
+  for (const k of keys.slice(0, -1)) v = v[k] as Record<string | number, unknown>;
+  v[keys.at(-1)!] = value;
+  return copy;
+}
 
 /** A writer that never produced valid JSON, with what its calls cost. */
 export class WriterError extends Error {
@@ -202,7 +254,12 @@ export interface Revision {
 
 /**
  * Calls a section writer and validates its JSON with `parse`. On a validation
- * error it retries (up to WRITE_ATTEMPTS calls in all), telling the writer what failed.
+ * error it retries (up to WRITE_ATTEMPTS calls in all), telling the writer what
+ * failed. When the problem is one text field in its reply (most are a field
+ * over its character limit), the retry asks for that field alone and puts it
+ * into the last reply, so the writer doesn't write the whole section again.
+ * Anything else (invalid JSON, a rule across fields, a field the reply
+ * doesn't have) asks for the whole object again.
  */
 export async function runWriter<T>(
   stage: Stage,
@@ -218,14 +275,27 @@ export async function runWriter<T>(
   let usage = ZERO_USAGE;
   let modelId = model;
   const retries: string[] = [];
+  /** The last whole reply that was valid JSON, and the field the last retry asked for, if it asked for one. */
+  let last: unknown;
+  let patching: string | null = null;
   for (let attempt = 1; ; attempt++) {
-    const msg = await anthropic().messages.create(writerParams({ model, context, finished, sectionPrompt }, messages));
+    const msg = await anthropic().messages.create(writerParams({ model, context, finished, sectionPrompt }, messages), requestOptions());
     usage = addUsage(usage, msg.usage);
     modelId = msg.model;
     assertFinished(msg, stage);
     const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+    let json: unknown;
     try {
-      const value = parse(parseJsonText(text));
+      json = parseJsonText(text);
+      if (patching) {
+        // Asked for as {"<path>": "..."}; a reply nested as the section's own shape is accepted too.
+        const fixed = (json as Record<string, unknown>)[patching] ?? stringAt(json, patching);
+        if (typeof fixed !== "string") throw new Error(`the reply has no string for ${patching}`);
+        json = withString(last, patching, fixed);
+      }
+      last = json;
+      // Parsers may change what they are given; `last` must stay the reply as sent.
+      const value = parse(structuredClone(json));
       return {
         value,
         run: {
@@ -244,9 +314,16 @@ export async function runWriter<T>(
         });
       }
       retries.push(problem.slice(0, 500));
+      const field = problemField(problem);
+      patching = last !== undefined && field && stringAt(last, field) !== undefined ? field : null;
       messages.push(
         { role: "assistant", content: text || "(empty reply)" },
-        { role: "user", content: `That JSON failed validation: ${problem}\nFix this and anything like it (count the characters of every field that has a limit), and reply with the whole JSON object again.` },
+        {
+          role: "user",
+          content: patching
+            ? `That JSON failed validation: ${problem}\nRewrite only that field to fix this (count its characters), keeping every rule above. Reply with a JSON object holding just that field, as {${JSON.stringify(patching)}: "..."}.`
+            : `That JSON failed validation: ${problem}\nFix this and anything like it (count the characters of every field that has a limit), and reply with the whole JSON object again.`,
+        },
       );
     }
   }

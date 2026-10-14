@@ -4,7 +4,7 @@ import { FACTCHECK_GAP_PROMPT, FACTCHECK_PROMPT } from "./factcheck";
 import type { PageCache } from "./fetch";
 import type { IntakeInput } from "./input";
 import { INTAKE_PROMPT } from "./intake";
-import type { StageRun } from "./llm";
+import { Budget, DeadlineError, withBudget, type StageRun } from "./llm";
 import { runPipeline, type StageOptions, type StagesResult, type TeardownStatus } from "./pipeline";
 import { RESEARCH_PROMPT, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT } from "./sections/alternatives";
@@ -154,9 +154,20 @@ async function claim(id: string): Promise<IntakeInput> {
 
 /**
  * Runs the pipeline for a queued teardown and records each step: statuses,
- * stage runs (fact-check's include the per-claim log), sources, sections and the report. Billable: callers must gate this behind payment (see CLAUDE.md).
+ * stage runs (fact-check's include the per-claim log), sources, sections and the report.
+ * The run gets a time budget from its start (llm.ts Budget): past it, it fails
+ * here, before Vercel's 300 s limit would kill it. Billable: callers must gate this behind payment (see CLAUDE.md).
  */
-export async function runStages(id: string, options: StageOptions = {}): Promise<StagesResult> {
+export async function runStages(id: string, options: StageOptions = {}, makeBudget: () => Budget = () => new Budget()): Promise<StagesResult> {
+  const budget = makeBudget();
+  try {
+    return await withBudget(budget, () => claimAndRun(id, options, budget));
+  } finally {
+    budget.done();
+  }
+}
+
+async function claimAndRun(id: string, options: StageOptions, budget: Budget): Promise<StagesResult> {
   await init();
   // Outside the try: a caller that loses the claim must not mark the winner's run failed.
   const input = await claim(id);
@@ -186,7 +197,9 @@ export async function runStages(id: string, options: StageOptions = {}): Promise
     if (err instanceof WriterError) {
       await recordRun(id, err.run).catch((e) => console.error(`Teardown ${id}: could not record failed writer run`, e));
     }
-    await setStatus(id, "failed", err instanceof Error ? err.message : String(err));
-    throw err;
+    // Calls aborted at the deadline throw the SDK's abort error; the row says why.
+    const message = budget.expired ? budget.message() : err instanceof Error ? err.message : String(err);
+    await setStatus(id, "failed", message);
+    throw budget.expired && !(err instanceof DeadlineError) ? new DeadlineError(message, { cause: err }) : err;
   }
 }

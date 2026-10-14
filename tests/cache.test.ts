@@ -137,8 +137,8 @@ describe("writer cache prefix", () => {
       verdict_revise: await writerCalls(() => writeVerdict(round2, {}, revise)),
     };
     const all = Object.values(runs).flat();
-    // First call plus three retries each.
-    for (const r of Object.values(runs)) expect(r).toHaveLength(4);
+    // First call plus two retries each.
+    for (const r of Object.values(runs)) expect(r).toHaveLength(3);
     const first = prefix(all[0], 0);
     for (const p of all) expect(prefix(p, 0)).toBe(first);
     // The shared context is exactly the cached block; section instructions come after it.
@@ -168,8 +168,8 @@ describe("writer cache prefix", () => {
       expect(p.messages).toHaveLength(1 + 2 * i);
       expect(p.messages.slice(0, ps[0].messages.length)).toEqual(ps[0].messages);
     }
-    expect(suffix(ps[3])).toContain("That JSON failed validation");
-    expect(prefix(ps[3], 0)).not.toContain("That JSON failed validation");
+    expect(suffix(ps[2])).toContain("That JSON failed validation");
+    expect(prefix(ps[2], 0)).not.toContain("That JSON failed validation");
   });
 
   it("uses at most four breakpoints", async () => {

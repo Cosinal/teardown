@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { IdeaSpec } from "./intake";
-import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun, type TokenUsage } from "./llm";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, requestOptions, type StageRun, type TokenUsage } from "./llm";
 
 export const RESEARCH_PROMPT = "research.v2";
 
@@ -152,7 +152,7 @@ export async function searchLoop(
   let usage = ZERO_USAGE;
 
   for (let i = 0; i < MAX_REQUESTS; i++) {
-    const message = await anthropic().messages.create(params(continuation));
+    const message = await anthropic().messages.create(params(continuation), requestOptions(null));
     responses.push({ message, retrieved_at: new Date().toISOString() });
     usage = addUsage(usage, message.usage);
     if (message.stop_reason !== "pause_turn") {

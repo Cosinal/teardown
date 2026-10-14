@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
@@ -64,8 +65,11 @@ export interface TokenUsage {
 /** One stage's run, recorded on the teardown row. */
 export interface StageRun {
   stage: Stage;
-  /** For a section: "research" (its own searches), "write", or "revise" (a rewrite after fact-check). */
-  step?: "research" | "write" | "revise";
+  /**
+   * For a section: "research" (its own searches), "write", "revise" (a rewrite
+   * after fact-check), or "warm" (writing the shared writer context to the cache, recorded on alternatives).
+   */
+  step?: "research" | "write" | "revise" | "warm";
   prompt_version: string;
   model: string;
   usage: TokenUsage;
@@ -169,6 +173,91 @@ export function cacheReport(runs: StageRun[]): { stage: string; runs: number; hi
   for (const r of runs) add(r.step ? `${r.stage}:${r.step}` : r.stage, r);
   for (const r of runs) add("total", r);
   return [...rows.values()].map((row) => ({ ...row, hit_rate: cacheHitRate(row.usage), cost_usd: Math.round(row.cost_usd * 1e4) / 1e4 }));
+}
+
+/** Thrown when a run passes its hard deadline: in-flight calls are aborted and the run fails. */
+export class DeadlineError extends Error {}
+
+/**
+ * A run's time limits, measured from when it starts. The whole engine runs in
+ * one Vercel function capped at 300 s (maxDuration). Past `softMs` the
+ * pipeline skips optional work (fact-check revisions) and finishes with what
+ * it has. At `hardMs` every call in flight is aborted, so the run fails and is
+ * refunded by startRun instead of being killed mid-step, with time left for that.
+ */
+export class Budget {
+  readonly started: number;
+  private readonly controller = new AbortController();
+  private readonly timer: ReturnType<typeof setTimeout>;
+
+  constructor(readonly softMs = 240_000, readonly hardMs = 275_000, private readonly now: () => number = Date.now) {
+    this.started = now();
+    this.timer = setTimeout(() => this.controller.abort(new DeadlineError(this.message())), hardMs);
+  }
+
+  elapsed() {
+    return this.now() - this.started;
+  }
+
+  /** Past the soft limit: skip anything optional. */
+  get overSoft() {
+    return this.elapsed() >= this.softMs;
+  }
+
+  get expired() {
+    return this.controller.signal.aborted || this.elapsed() >= this.hardMs;
+  }
+
+  /** Aborted at the hard deadline. */
+  get signal() {
+    return this.controller.signal;
+  }
+
+  message() {
+    return `Run passed its ${Math.round(this.hardMs / 1000)} s time budget`;
+  }
+
+  /** Throws a DeadlineError once the hard deadline has passed. */
+  check() {
+    if (this.expired) throw new DeadlineError(this.message());
+  }
+
+  /** Stops the deadline timer. Call when the run ends. */
+  done() {
+    clearTimeout(this.timer);
+  }
+}
+
+// The current run's budget, per async context, so concurrent runs on one instance never share one.
+const budgets = new AsyncLocalStorage<Budget>();
+
+/** Runs `fn` with `budget` as the budget every API call inside it uses. */
+export function withBudget<T>(budget: Budget, fn: () => Promise<T>): Promise<T> {
+  return budgets.run(budget, fn);
+}
+
+export function currentBudget(): Budget | undefined {
+  return budgets.getStore();
+}
+
+/**
+ * Cap on one non-search API call, retries by the SDK included in each try. The
+ * slowest normal writer call measured is about 25 s; a few calls took
+ * 70-90 s (stage runs of 2026-10-13). Search calls get no cap of their own: a
+ * timed-out search would be re-run and billed again.
+ */
+export const CALL_TIMEOUT_MS = 60_000;
+
+/**
+ * Request options for one API call: aborted at the run's hard deadline, and
+ * timed out after `capMs` (or when the budget runs out, if sooner).
+ */
+export function requestOptions(capMs: number | null = CALL_TIMEOUT_MS): Anthropic.RequestOptions {
+  const budget = currentBudget();
+  if (!budget) return capMs === null ? {} : { timeout: capMs };
+  budget.check();
+  const left = Math.max(1, budget.hardMs - budget.elapsed());
+  return { signal: budget.signal, timeout: capMs === null ? left : Math.min(capMs, left) };
 }
 
 let client: Anthropic | undefined;
