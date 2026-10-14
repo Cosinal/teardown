@@ -447,7 +447,9 @@ async function judge(claim: CheckClaim, source: Source | undefined, model: strin
       // stricter-of-two rule are what keep verdicts stable.
       thinking: { type: "disabled" },
       output_config: { effort: "medium", format: zodOutputFormat(VerdictSchema) },
-      system: loadPrompt(FACTCHECK_PROMPT),
+      // Everything up to here is the same for every claim in every section, so
+      // it is cached; the claim (and page) after it varies per call.
+      system: [{ type: "text", text: loadPrompt(FACTCHECK_PROMPT), cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: claimRequest(claim, source, page) }],
     });
     usage = addUsage(usage, msg.usage);
@@ -489,10 +491,16 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
     return out;
   };
 
-  const excerptResults: CheckResult[] = await mapLimit(claims, CONCURRENCY, async (c) => {
+  const excerptCheck = async (c: CheckClaim): Promise<CheckResult> => {
     const { r } = await ask(c, "excerpt");
     return { id: c.id, ...r, quote: null, basis: "excerpt" as const, excerpt_verdict: r.verdict };
-  });
+  };
+  // The first call alone writes the cached prompt; parallel calls before it
+  // finishes would each write it too. The rest then read it.
+  const excerptResults: CheckResult[] = [
+    await excerptCheck(claims[0]),
+    ...await mapLimit(claims.slice(1), CONCURRENCY, excerptCheck),
+  ];
 
   const load = pageLoader(options.pages ?? memoryPageCache(), options.fetcher ?? fetchPage);
   const pages: NonNullable<StageRun["pages"]> = [];

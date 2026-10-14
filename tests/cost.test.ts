@@ -10,12 +10,12 @@ describe("costUsd", () => {
   });
 
   it("prices Sonnet 5.5 with cache writes by TTL", () => {
-    // 1M input ($2) + 100k output ($1) + 400k 5m writes ($1) + 100k 1h writes ($0.40) + 1M cache read ($0.20) + 6 searches ($0.06)
+    // 1M input ($2) + 100k output ($1) + 400k 5m writes ($1) + 100k 1h writes ($0.40) + 1M cache read ($0.10) + 6 searches ($0.06)
     const u = {
       ...ZERO_USAGE, input_tokens: 1_000_000, output_tokens: 100_000, cache_creation_input_tokens: 500_000,
       cache_creation_1h_input_tokens: 100_000, cache_read_input_tokens: 1_000_000, web_search_requests: 6,
     };
-    expect(costUsd("claude-sonnet-5-5", u)).toBe(4.66);
+    expect(costUsd("claude-sonnet-5-5", u)).toBe(4.56);
   });
 
   it("prices runs recorded before the 1h field existed at the 5-minute rate", () => {

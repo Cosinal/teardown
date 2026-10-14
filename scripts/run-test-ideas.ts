@@ -25,7 +25,7 @@ import { z } from "zod";
 import { checkClaimList, collectClaims, supportRate, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageCache } from "../lib/engine/fetch";
 import type { IntakeInput } from "../lib/engine/input";
-import { MODELS, addUsage, anthropic, assertFinished, costUsd, ZERO_USAGE, type StageRun } from "../lib/engine/llm";
+import { MODELS, addUsage, anthropic, assertFinished, cacheReport, costUsd, ZERO_USAGE, type StageRun } from "../lib/engine/llm";
 import { runPipeline, type StageOptions, type StagesResult } from "../lib/engine/pipeline";
 import { blockersCheck } from "../lib/engine/sections/blockers";
 import { reportBrief } from "../lib/engine/sections/brief";
@@ -195,6 +195,7 @@ async function main() {
         + ` + demand ${find("demand_evidence", "research")?.usage.web_search_requests ?? 0} + econ ${find("economics", "research")?.usage.web_search_requests ?? 0}`,
       sources: `${r.sources.length} in store, ${rep.sources.length} in report`,
       total_usd: round(r.runs.reduce((n, x) => n + x.cost_usd, 0)),
+      cache_hit: pct(cacheReport(r.runs).find((x) => x.stage === "total")?.hit_rate ?? 0),
       intake_research_usd: sum([find("intake"), find("research")]),
       section_research_usd: sum(SEARCHING.map((n) => find(n, "research"))),
       writers_usd: `searching ${sum(SEARCHING.map((n) => find(n, "write")))}, later ${sum(LATER.flatMap((n) => [find(n, "write"), find(n, "revise")]))}`

@@ -38,13 +38,14 @@ export const STAGE_MODELS: Record<Stage, string> = {
   factcheck: MODELS.haiku,
 };
 
-// USD per million tokens, from https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-10-11).
-// Cache writes cost 1.25x input (5-minute TTL) or 2x (1-hour TTL).
+// USD per million tokens, from https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-10-14).
+// Cache writes cost 1.25x input (5-minute TTL) or 2x (1-hour TTL). Cache reads cost
+// 0.05x input on Opus 5.5 and Sonnet 5.5, 0.1x on Haiku 5.5.
 // Web search is billed per search on top of tokens; its result tokens count as input.
 // Haiku 5.5's rates apply to prompts up to 100K tokens (double above that); fact-check prompts stay far below.
 const PRICES: Record<string, { input: number; output: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number }> = {
   "claude-opus-5-5": { input: 4, output: 20, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1 },
   "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite5m: 0.125, cacheWrite1h: 0.2, cacheRead: 0.01 },
 };
 const WEB_SEARCH_USD = 10 / 1000;
@@ -147,6 +148,27 @@ export function costUsd(model: string, u: TokenUsage): number {
     write1h * p.cacheWrite1h +
     u.cache_read_input_tokens * p.cacheRead;
   return Math.round((tokens / 1e6 + u.web_search_requests * WEB_SEARCH_USD) * 1e4) / 1e4;
+}
+
+/**
+ * Share of input tokens read from cache: reads / (uncached input + cache
+ * writes + reads). The same measure as the console's cache hit rate.
+ */
+export function cacheHitRate(u: TokenUsage): number {
+  const total = u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens;
+  return total ? u.cache_read_input_tokens / total : 0;
+}
+
+/** Cache hit rate per stage (and step) and for the whole run, with each line's cost. */
+export function cacheReport(runs: StageRun[]): { stage: string; runs: number; hit_rate: number; usage: TokenUsage; cost_usd: number }[] {
+  const rows = new Map<string, { stage: string; runs: number; usage: TokenUsage; cost_usd: number }>();
+  const add = (stage: string, r: StageRun) => {
+    const row = rows.get(stage) ?? { stage, runs: 0, usage: ZERO_USAGE, cost_usd: 0 };
+    rows.set(stage, { stage, runs: row.runs + 1, usage: sumUsage(row.usage, r.usage), cost_usd: row.cost_usd + r.cost_usd });
+  };
+  for (const r of runs) add(r.step ? `${r.stage}:${r.step}` : r.stage, r);
+  for (const r of runs) add("total", r);
+  return [...rows.values()].map((row) => ({ ...row, hit_rate: cacheHitRate(row.usage), cost_usd: Math.round(row.cost_usd * 1e4) / 1e4 }));
 }
 
 let client: Anthropic | undefined;
