@@ -14,7 +14,8 @@ export function proxy(req: NextRequest) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/new",
+    // "/" so /t/<id> sees it too (failed-run errors and re-run).
+    path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
   return res;

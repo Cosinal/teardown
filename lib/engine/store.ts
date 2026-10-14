@@ -10,7 +10,7 @@ import { RESEARCH_PROMPT, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT } from "./sections/alternatives";
 import { ASSUMPTIONS_WRITE_PROMPT } from "./sections/assumptions";
 import { BLOCKERS_WRITE_PROMPT } from "./sections/blockers";
-import { WRITER_SHARED_PROMPT } from "./sections/common";
+import { WRITER_SHARED_PROMPT, WriterError } from "./sections/common";
 import { DEMAND_RESEARCH_PROMPT, DEMAND_WRITE_PROMPT } from "./sections/demand";
 import { DISTRIBUTION_WRITE_PROMPT } from "./sections/distribution";
 import { ECONOMICS_RESEARCH_PROMPT, ECONOMICS_WRITE_PROMPT } from "./sections/economics";
@@ -44,6 +44,28 @@ export async function createTeardown(input: IntakeInput): Promise<string> {
 
 async function setStatus(id: string, status: TeardownStatus, error: string | null = null) {
   await sql()`UPDATE teardowns SET status = ${status}, error = ${error}, updated_at = now() WHERE id = ${id}`;
+}
+
+/** Saved on a run that stopped updating its row, e.g. killed at maxDuration or cut off from the database. */
+export const STALE_RUN_ERROR = "Run timed out or lost connection";
+const SETTLED: TeardownStatus[] = ["queued", "done", "failed"];
+
+/** True for a status a live run passes through: not waiting, finished or failed. */
+export function isInProgress(status: TeardownStatus) {
+  return !SETTLED.includes(status);
+}
+
+/**
+ * Marks an in-progress run failed if its row hasn't been updated for 6
+ * minutes, longer than maxDuration (300 s) plus any single stage. The age is
+ * checked by the database in the same statement, so a run that just recorded
+ * a step is never swept. Returns whether it marked the row.
+ */
+export async function failStaleRun(id: string): Promise<boolean> {
+  const rows = await sql()`UPDATE teardowns SET status = 'failed', error = ${STALE_RUN_ERROR}, updated_at = now()
+    WHERE id = ${id} AND status NOT IN ('queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes'
+    RETURNING id`;
+  return rows.length > 0;
 }
 
 async function recordRun(id: string, run: StageRun) {
@@ -94,16 +116,30 @@ export function dbPageCache(teardownId: string): PageCache {
   };
 }
 
+/** Thrown by runStages when another caller already claimed the teardown. */
+export class AlreadyClaimedError extends Error {}
+
+/**
+ * Moves a queued teardown to intake and returns its input, in one statement,
+ * so two callers can't both run it. Throws if the id doesn't exist or isn't queued.
+ */
+async function claim(id: string): Promise<IntakeInput> {
+  const rows = await sql()`UPDATE teardowns SET status = 'intake', updated_at = now()
+    WHERE id = ${id} AND status = 'queued' RETURNING id, input`;
+  if (rows.length) return rows[0].input as IntakeInput;
+  const found = await sql()`SELECT status FROM teardowns WHERE id = ${id}`;
+  if (!found.length) throw new Error(`Teardown ${id} not found`);
+  throw new AlreadyClaimedError(`Teardown ${id} is ${found[0].status}, not queued`);
+}
+
 /**
  * Runs the pipeline for a queued teardown and records each step: statuses,
  * stage runs (fact-check's include the per-claim log), sources, sections and the report. Billable: callers must gate this behind payment (see CLAUDE.md).
  */
 export async function runStages(id: string, options: StageOptions = {}): Promise<StagesResult> {
   await init();
-  const rows = await sql()`SELECT status, input FROM teardowns WHERE id = ${id}`;
-  if (!rows.length) throw new Error(`Teardown ${id} not found`);
-  if (rows[0].status !== "queued") throw new Error(`Teardown ${id} is ${rows[0].status}, not queued`);
-  const input = rows[0].input as IntakeInput;
+  // Outside the try: a caller that loses the claim must not mark the winner's run failed.
+  const input = await claim(id);
 
   try {
     const opts = { ...options, factcheck: { ...options.factcheck, pages: options.factcheck?.pages ?? dbPageCache(id) } };
@@ -126,6 +162,10 @@ export async function runStages(id: string, options: StageOptions = {}): Promise
       },
     });
   } catch (err) {
+    // A writer that ran out of attempts still spent money: record it before marking the row failed.
+    if (err instanceof WriterError) {
+      await recordRun(id, err.run).catch((e) => console.error(`Teardown ${id}: could not record failed writer run`, e));
+    }
     await setStatus(id, "failed", err instanceof Error ? err.message : String(err));
     throw err;
   }

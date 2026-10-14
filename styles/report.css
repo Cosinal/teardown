@@ -234,5 +234,8 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
 .td-steps li.is-now{color:var(--accent);font-weight:600}
 .td-steps li.is-now::before{animation:td-pulse 1.2s ease-in-out infinite}
 @keyframes td-pulse{50%{background:currentColor}}
+/* Admin only: a failed run's saved error and the re-run button. */
+.td-admin{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.td-admin pre{margin:0;max-width:100%;max-height:240px;overflow:auto;white-space:pre-wrap;font-size:11px;line-height:15px;color:#3F444C}
 @media (prefers-reduced-motion:reduce){.td-steps li.is-now::before{animation:none;background:currentColor}}
 @media (max-width:880px){.td-doc{padding:16px}.td-sheet.is-cooking{width:100%;padding:24px 20px}}
