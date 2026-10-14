@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 };
 
 // The submit action runs the engine after its response (app/new/actions.ts),
-// and a server action takes its time limit from the page. A report takes a few minutes.
-export const maxDuration = 800;
+// and a server action takes its time limit from the page. 300 s is the Vercel
+// Hobby cap; a report takes a few minutes.
+export const maxDuration = 300;
 
 // Gated behind ADMIN_KEY until /privacy and /data cover intake data (see CLAUDE.md).
 // Unlock once with /new?key=ADMIN_KEY (proxy.ts sets the cookie).

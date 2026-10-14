@@ -14,7 +14,7 @@ import { rerunTeardown } from "./actions";
 type Props = { params: Promise<{ id: string }> };
 
 // The admin re-run action runs the engine after its response, within this page's limit.
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 type Loaded =
   | { report: TeardownReport }
