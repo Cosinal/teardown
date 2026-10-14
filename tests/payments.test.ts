@@ -219,6 +219,16 @@ describe("webhook", () => {
     expect(after).not.toHaveBeenCalled();
   });
 
+  it("a delayed payment queues the row once it settles", async () => {
+    const row = rowDb({ status: "awaiting_payment" });
+    await deliver(completed("abc", "pi_1", { payment_status: "unpaid" }));
+    expect(after).not.toHaveBeenCalled();
+    await deliver({ ...completed("abc", "pi_1"), type: "checkout.session.async_payment_succeeded" });
+    await deliver({ ...completed("abc", "pi_1"), type: "checkout.session.async_payment_succeeded" });
+    expect(after).toHaveBeenCalledOnce();
+    expect(row).toMatchObject({ status: "queued", payment_intent: "pi_1" });
+  });
+
   it("acknowledges other event types without acting", async () => {
     const res = await deliver({ ...completed("abc"), type: "payment_intent.created" });
     expect(res.status).toBe(200);
