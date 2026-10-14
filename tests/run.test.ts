@@ -44,11 +44,12 @@ const RUN: StageRun = {
   started_at: "2026-10-14T00:00:00.000Z", duration_ms: 1000,
 };
 
-const { runStages, AlreadyClaimedError } = await import("../lib/engine/store");
+const { runStages, AlreadyClaimedError, failStaleRun, STALE_RUN_ERROR } = await import("../lib/engine/store");
 const { startRun } = await import("../lib/engine/run");
 const { submitIdea } = await import("../app/new/actions");
 const { rerunTeardown } = await import("../app/t/[id]/actions");
 const { adminCookieValue } = await import("../lib/admin");
+const { default: TeardownPage } = await import("../app/t/[id]/page");
 
 const claimSql = (t: string) => t.startsWith("UPDATE teardowns SET status = 'intake'");
 const failedSql = (t: string) => t.startsWith("UPDATE teardowns SET status = $, error = $");
@@ -205,5 +206,63 @@ describe("admin re-run", () => {
     await expect(rerunTeardown("abc")).rejects.toBeInstanceOf(NotFound);
     expect(queries).toEqual([]);
     expect(after).not.toHaveBeenCalled();
+  });
+});
+
+describe("stale-run sweep", () => {
+  const staleSql = (t: string) => t.startsWith("UPDATE teardowns SET status = 'failed'");
+  const page = async (id: string) =>
+    (await TeardownPage({ params: Promise.resolve({ id }) })) as { props: { status: string; admin?: { error: string | null } } };
+
+  it("fails an in-progress row only if the database says it's 6 minutes stale", async () => {
+    respond = (t) => (staleSql(t) ? [{ id: "abc" }] : []);
+    expect(await failStaleRun("abc")).toBe(true);
+    expect(queries[0].text).toBe(
+      "UPDATE teardowns SET status = 'failed', error = $, updated_at = now() WHERE id = $ AND status NOT IN ('queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes' RETURNING id",
+    );
+    expect(queries[0].values).toEqual(["Run timed out or lost connection", "abc"]);
+  });
+
+  it("returns false when no row matched (fresh, settled or unknown)", async () => {
+    expect(await failStaleRun("abc")).toBe(false);
+  });
+
+  describe("on /t/[id]", () => {
+    beforeEach(() => vi.stubEnv("DATABASE_URL", "postgres://mock"));
+    const row = (status: string) => (t: string) => {
+      if (t.startsWith("SELECT status, idea, report, error")) return [{ status, idea: "Bike repair van", report: null, error: null }];
+      return staleSql(t) ? [{ id: "abc" }] : [];
+    };
+
+    it("a stale in-progress run shows as failed, with the error and re-run for admins", async () => {
+      vi.stubEnv("ADMIN_KEY", "s3cret");
+      cookie.value = adminCookieValue();
+      respond = row("factcheck");
+      const el = await page("abc");
+      expect(queries.some((q) => staleSql(q.text))).toBe(true);
+      expect(el.props.status).toBe("failed");
+      expect(el.props.admin?.error).toBe(STALE_RUN_ERROR);
+    });
+
+    it("the public page shows failed without the error", async () => {
+      respond = row("writing");
+      const el = await page("abc");
+      expect(el.props.status).toBe("failed");
+      expect(el.props.admin).toBeUndefined();
+    });
+
+    it("a fresh in-progress run keeps cooking", async () => {
+      respond = (t) => (staleSql(t) ? [] : row("research")(t));
+      const el = await page("abc");
+      expect(queries.some((q) => staleSql(q.text))).toBe(true);
+      expect(el.props.status).toBe("research");
+    });
+
+    it.each(["queued", "failed"])("a %s row is never swept", async (status) => {
+      respond = row(status);
+      const el = await page("abc");
+      expect(queries.some((q) => staleSql(q.text))).toBe(false);
+      expect(el.props.status).toBe(status);
+    });
   });
 });

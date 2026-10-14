@@ -7,7 +7,7 @@ import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { init, sql } from "@/lib/db";
 import { parseReport, type TeardownReport } from "@/lib/engine";
 import { SAMPLE_REPORT } from "@/lib/engine/fixtures/sample";
-import type { TeardownStatus } from "@/lib/engine/store";
+import { STALE_RUN_ERROR, failStaleRun, isInProgress, type TeardownStatus } from "@/lib/engine/store";
 import "@/styles/report.css";
 import { rerunTeardown } from "./actions";
 
@@ -29,6 +29,10 @@ const load = cache(async (id: string): Promise<Loaded | null> => {
   const rows = await sql()`SELECT status, idea, report, error FROM teardowns WHERE id = ${id}`;
   if (!rows.length) return null;
   const row = rows[0];
+  // A run that stopped updating its row is marked failed, so the admin re-run button appears.
+  if (!row.report && isInProgress(row.status) && (await failStaleRun(id))) {
+    return { report: null, status: "failed", idea: row.idea, error: STALE_RUN_ERROR };
+  }
   // A queued or running teardown has no report yet.
   return row.report ? { report: parseReport(row.report) } : { report: null, status: row.status, idea: row.idea, error: row.error };
 });

@@ -46,6 +46,28 @@ async function setStatus(id: string, status: TeardownStatus, error: string | nul
   await sql()`UPDATE teardowns SET status = ${status}, error = ${error}, updated_at = now() WHERE id = ${id}`;
 }
 
+/** Saved on a run that stopped updating its row, e.g. killed at maxDuration or cut off from the database. */
+export const STALE_RUN_ERROR = "Run timed out or lost connection";
+const SETTLED: TeardownStatus[] = ["queued", "done", "failed"];
+
+/** True for a status a live run passes through: not waiting, finished or failed. */
+export function isInProgress(status: TeardownStatus) {
+  return !SETTLED.includes(status);
+}
+
+/**
+ * Marks an in-progress run failed if its row hasn't been updated for 6
+ * minutes, longer than maxDuration (300 s) plus any single stage. The age is
+ * checked by the database in the same statement, so a run that just recorded
+ * a step is never swept. Returns whether it marked the row.
+ */
+export async function failStaleRun(id: string): Promise<boolean> {
+  const rows = await sql()`UPDATE teardowns SET status = 'failed', error = ${STALE_RUN_ERROR}, updated_at = now()
+    WHERE id = ${id} AND status NOT IN ('queued', 'done', 'failed') AND updated_at < now() - interval '6 minutes'
+    RETURNING id`;
+  return rows.length > 0;
+}
+
 async function recordRun(id: string, run: StageRun) {
   await sql()`UPDATE teardowns SET
     stage_runs = stage_runs || ${JSON.stringify([run])}::jsonb,
