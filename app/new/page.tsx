@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import IntakeForm from "@/components/IntakeForm";
 import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
@@ -31,11 +31,23 @@ async function draftValues(id: string | undefined, admin: boolean): Promise<Reco
   return values;
 }
 
-export default async function NewTeardown({ searchParams }: { searchParams: Promise<{ draft?: string | string[] }> }) {
+function one(v: string | string[] | undefined) {
+  return typeof v === "string" ? v : undefined;
+}
+
+export default async function NewTeardown({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value);
   if (!admin) notFound();
-  const { draft } = await searchParams;
-  const values = await draftValues(typeof draft === "string" ? draft : undefined, admin);
+  const params = await searchParams;
+  const values: Record<string, string> = { ...(await draftValues(one(params.draft), admin)) };
+  const attr = {
+    ref: one(params.ref),
+    utm_source: one(params.utm_source),
+    utm_medium: one(params.utm_medium),
+    utm_campaign: one(params.utm_campaign),
+    referrer: (await headers()).get("referer") ?? undefined,
+  };
+  for (const [k, v] of Object.entries(attr)) if (v) values[k] = v;
   return (
     <>
       <header><div className="wrap"><a href="/">Teardown</a><span>New teardown</span></div></header>

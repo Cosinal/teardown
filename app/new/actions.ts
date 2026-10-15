@@ -8,6 +8,7 @@ import { init, sql } from "@/lib/db";
 import { IntakeInputSchema } from "@/lib/engine/input";
 import { startRun } from "@/lib/engine/run";
 import { createTeardown, skipPayment, updateDraft } from "@/lib/engine/store";
+import { recordEvent } from "@/lib/events";
 import { OWNER_COOKIE_OPTIONS, isOwnerToken, newOwnerToken, ownerCookie, requestOrigin } from "@/lib/payments";
 import { createCheckout } from "@/lib/stripe";
 
@@ -70,6 +71,17 @@ export async function submitIdea(_prev: FormState, form: FormData): Promise<Form
   } catch (err) {
     console.error(`Teardown ${id}: could not create checkout`, err);
     return { errors: { form: "Something went wrong opening checkout. Please try again." }, values: { ...values, draft: id } };
+  }
+  if (!admin) {
+    await recordEvent({
+      kind: "checkout_start",
+      path: "/new",
+      ref: values.ref,
+      referrer: values.referrer,
+      utm_source: values.utm_source,
+      utm_medium: values.utm_medium,
+      utm_campaign: values.utm_campaign,
+    });
   }
   redirect(url);
 }

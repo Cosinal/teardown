@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { init, sql } from "@/lib/db";
 import { startRun } from "@/lib/engine/run";
+import { recordEvent } from "@/lib/events";
 import { isOwnerToken, ownerCookie, requestOrigin } from "@/lib/payments";
 import { createCheckout } from "@/lib/stripe";
 
@@ -33,5 +34,9 @@ export async function resumeCheckout(id: string): Promise<void> {
   if (!allowed) notFound();
   // Already paid (or never existed for this viewer): the page shows where it's at.
   if (!rows.length) redirect(`/t/${id}`);
-  redirect(await createCheckout(id, await requestOrigin()));
+  const url = await createCheckout(id, await requestOrigin());
+  if (!isAdminCookie(jar.get(ADMIN_COOKIE)?.value)) {
+    await recordEvent({ kind: "checkout_start", path: "/t/resume" });
+  }
+  redirect(url);
 }
