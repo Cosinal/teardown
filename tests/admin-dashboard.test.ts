@@ -92,4 +92,14 @@ describe("event endpoint", () => {
     }));
     expect(res.status).toBe(204);
   });
+
+  it("ignores a request that already has the admin cookie", async () => {
+    jar.set(ADMIN_COOKIE, adminCookieValue());
+    const res = await postEvent(new Request("https://teardown.test/api/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "page_view", path: "/" }),
+    }));
+    expect(res.status).toBe(204);
+  });
 });

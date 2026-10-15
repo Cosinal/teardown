@@ -35,9 +35,10 @@ export async function POST(req: Request) {
   }
 
   await init();
-  // amount_total is already on the event (USD cents). No extra Stripe call.
+  // amount_total and currency are already on the event. No extra Stripe call.
   const amountCents = typeof session.amount_total === "number" ? session.amount_total : null;
+  const currency = typeof session.currency === "string" ? session.currency : null;
   // Throws (500, so Stripe retries) if the database or a stray-payment refund fails.
-  if (await markPaid(id, paymentIntent, amountCents)) after(() => startRun(id));
+  if (await markPaid(id, paymentIntent, amountCents, currency)) after(() => startRun(id));
   return Response.json({ received: true });
 }

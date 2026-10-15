@@ -59,6 +59,7 @@ export function init() {
     // already sent (cents). Null on rows paid before this existed.
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`;
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS amount_cents INTEGER`;
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS currency TEXT`;
     // First-party page views and checkout starts. Path, optional campaign
     // codes, referring hostname, time. No IP, no cookie, no user id.
     await q`CREATE TABLE IF NOT EXISTS events (
@@ -73,6 +74,7 @@ export function init() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
     await q`CREATE INDEX IF NOT EXISTS events_kind_created_idx ON events (kind, created_at)`;
     await q`CREATE INDEX IF NOT EXISTS events_path_idx ON events (path)`;
+    await q`CREATE INDEX IF NOT EXISTS events_created_idx ON events (created_at)`;
     await q`CREATE TABLE IF NOT EXISTS sources (
       teardown_id TEXT NOT NULL REFERENCES teardowns(id),
       source_id TEXT NOT NULL,

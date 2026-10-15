@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
-import { NEAR_LIMIT_MS, loadDashboard, type CountPoint, type DashboardData, type PeriodSales, type SalesPoint } from "@/lib/admin-metrics";
+import { DASHBOARD_TZ, NEAR_LIMIT_MS, loadDashboard, type CountPoint, type DashboardData, type PeriodSales, type SalesPoint } from "@/lib/admin-metrics";
 import "@/styles/admin.css";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +48,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 function Period({ label, p }: { label: string; p: PeriodSales }) {
-  return <Stat label={label} value={`${p.paid} · ${usd(p.revenueCents)}`} hint={`${p.refunds} refunded · ${p.failed} failed`} />;
+  return <Stat label={label} value={`${p.paid} · net ${usd(p.netRevenueCents)}`} hint={`gross ${usd(p.revenueCents)} − refunds ${usd(p.refundCents)} · ${p.refunds} refunded · ${p.failed} failed`} />;
 }
 
 function Counts({ rows, empty, label = "Name" }: { rows: CountPoint[]; empty: string; label?: string }) {
@@ -65,8 +65,8 @@ function SalesTable({ rows, empty }: { rows: SalesPoint[]; empty: string }) {
   if (rows.every((r) => r.paid === 0)) return <p className="empty">{empty}</p>;
   return (
     <table>
-      <thead><tr><th>When</th><th className="num">Paid</th><th className="num">Revenue</th></tr></thead>
-      <tbody>{rows.map((r) => <tr key={r.key}><td>{r.key}</td><td className="num">{r.paid}</td><td className="num">{usd(r.revenueCents)}</td></tr>)}</tbody>
+      <thead><tr><th>When</th><th className="num">Paid</th><th className="num">Gross</th><th className="num">Net</th></tr></thead>
+      <tbody>{rows.map((r) => <tr key={r.key}><td>{r.key}</td><td className="num">{r.paid}</td><td className="num">{usd(r.revenueCents)}</td><td className="num">{usd(r.netRevenueCents)}</td></tr>)}</tbody>
     </table>
   );
 }
@@ -81,7 +81,7 @@ function Dashboard({ data }: { data: DashboardData }) {
         <h1>How the business is doing.</h1>
         <p className="lede">
           Numbers come from our database. Sales use paid teardowns (a Stripe payment ID on the row);
-          revenue is the amount Stripe already sent on the webhook, in USD. Page views start after this ships.
+          USD revenue is the amount Stripe already sent on the webhook. Days and weeks are {DASHBOARD_TZ}.
           Search Console and Vercel Analytics totals are not wired — see the last section.
         </p>
 
@@ -89,8 +89,11 @@ function Dashboard({ data }: { data: DashboardData }) {
           <h2>Sales</h2>
           <p className="note">
             Paid = row has a payment intent. Checkout started = awaiting payment or already paid (admin skip-payment is excluded).
-            Sale date is <code>paid_at</code>, or <code>created_at</code> on older rows. Today and the week are UTC.
+            Sale date is <code>paid_at</code>, or <code>created_at</code> on older rows. Today, last 7 days, and the day/week tables use {DASHBOARD_TZ}.
+            Net is gross USD minus refunded USD. Only <code>usd</code> amounts count as USD revenue.
             {sales.paidWithoutAmount ? ` ${sales.paidWithoutAmount} paid row${sales.paidWithoutAmount === 1 ? "" : "s"} have no stored amount, so revenue undercounts them.` : ""}
+            {sales.paidUnknownCurrency ? ` ${sales.paidUnknownCurrency} paid row${sales.paidUnknownCurrency === 1 ? "" : "s"} have an amount but no currency.` : ""}
+            {sales.nonUsd.length ? ` Non-USD: ${sales.nonUsd.map((c) => `${c.paid} ${c.currency.toUpperCase()}`).join(", ")}.` : ""}
           </p>
           <div className="stats">
             <Period label="Today" p={sales.today} />
@@ -99,6 +102,8 @@ function Dashboard({ data }: { data: DashboardData }) {
             <Stat label="Checkout → paid" value={pct(sales.conversion)} hint={`${sales.paid} paid / ${sales.checkoutStarted} started`} />
           </div>
           <div className="stats more">
+            <Stat label="Gross USD" value={usd(sales.all.revenueCents)} />
+            <Stat label="Net USD" value={usd(sales.all.netRevenueCents)} hint={`${usd(sales.refundCents)} refunded`} />
             <Stat label="Refunds" value={String(sales.refunds)} hint={usd(sales.refundCents)} />
             <Stat label="Failed after pay" value={String(sales.failedPaid)} />
           </div>
@@ -138,7 +143,7 @@ function Dashboard({ data }: { data: DashboardData }) {
         <section>
           <h2>Ideas and reports</h2>
           <p className="note">
-            Runtime is the wall-clock span of stored <code>stage_runs</code> (same as <code>scripts/stage-timings.ts</code>).
+            Runtime is the wall-clock span of the latest attempt in <code>stage_runs</code> (re-runs append; older attempts are ignored).
             Close to the limit means ≥ {NEAR_LIMIT_MS / 1000}s of the 300s Vercel cap. Failure rate is failed / (done + failed).
             Refund rate is refunded / paid.
           </p>
@@ -163,8 +168,9 @@ function Dashboard({ data }: { data: DashboardData }) {
         <section>
           <h2>Where visitors come from</h2>
           <p className="note">
-            First-party events only: public page views and checkout starts. We store path, referring hostname, optional <code>ref</code> / UTM, and time — no IP, no extra cookie.
-            Checkout starts are also written when Stripe Checkout is opened. Signups-by-ref above is the waitlist table; this section is events plus that mix.
+            First-party events from the last {traffic.windowDays} days: public page views and checkout starts.
+            Stored fields are path, referring hostname, optional <code>ref</code> / UTM, and time — no IP, no teardown id, no extra cookie.
+            Admin-cookie requests and <code>/new</code> page views are not recorded. Checkout starts from paying visitors use path <code>/new</code> or <code>/t/resume</code>.
           </p>
           <div className="stats">
             <Stat label="Page views" value={String(traffic.pageViews)} />

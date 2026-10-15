@@ -72,14 +72,16 @@ export async function submitIdea(_prev: FormState, form: FormData): Promise<Form
     console.error(`Teardown ${id}: could not create checkout`, err);
     return { errors: { form: "Something went wrong opening checkout. Please try again." }, values: { ...values, draft: id } };
   }
-  await recordEvent({
-    kind: "checkout_start",
-    path: "/new",
-    ref: values.ref,
-    referrer: values.referrer,
-    utm_source: values.utm_source,
-    utm_medium: values.utm_medium,
-    utm_campaign: values.utm_campaign,
-  });
+  if (!admin) {
+    await recordEvent({
+      kind: "checkout_start",
+      path: "/new",
+      ref: values.ref,
+      referrer: values.referrer,
+      utm_source: values.utm_source,
+      utm_medium: values.utm_medium,
+      utm_campaign: values.utm_campaign,
+    });
+  }
   redirect(url);
 }

@@ -35,6 +35,8 @@ export async function resumeCheckout(id: string): Promise<void> {
   // Already paid (or never existed for this viewer): the page shows where it's at.
   if (!rows.length) redirect(`/t/${id}`);
   const url = await createCheckout(id, await requestOrigin());
-  await recordEvent({ kind: "checkout_start", path: `/t/${id}` });
+  if (!isAdminCookie(jar.get(ADMIN_COOKIE)?.value)) {
+    await recordEvent({ kind: "checkout_start", path: "/t/resume" });
+  }
   redirect(url);
 }

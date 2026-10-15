@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import IntakeForm from "@/components/IntakeForm";
-import Track from "@/components/Track";
 import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { init, sql } from "@/lib/db";
 import { isOwnerToken, ownerCookie } from "@/lib/payments";
@@ -51,7 +50,6 @@ export default async function NewTeardown({ searchParams }: { searchParams: Prom
   for (const [k, v] of Object.entries(attr)) if (v) values[k] = v;
   return (
     <>
-      <Track path="/new" />
       <header><div className="wrap"><a href="/">Teardown</a><span>New teardown</span></div></header>
       <main><div className="wrap">
         <p className="eyebrow">New teardown</p>

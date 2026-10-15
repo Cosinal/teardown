@@ -1,12 +1,17 @@
+import { cookies } from "next/headers";
+import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { recordEvent } from "@/lib/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Public: records one first-party page view or checkout start. Always 204;
-// invalid payloads are ignored. Nothing about the visitor is returned.
+// invalid payloads and admin-cookie requests are ignored. Nothing is returned.
 export async function POST(req: Request) {
   try {
+    if (isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value)) {
+      return new Response(null, { status: 204 });
+    }
     let b: Record<string, unknown> = {};
     try {
       const parsed = await req.json();
