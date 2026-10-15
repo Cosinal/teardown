@@ -16,7 +16,7 @@ Reply with this JSON shape:
 
 Every field above is a plain string or number, not a cited part object.
 
-Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+Character limits are hard: count characters and stay under each one. Aim about ten percent under.
 
 1 to 3 assumptions, ranked: the first is the riskiest.
 

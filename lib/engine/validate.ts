@@ -20,8 +20,13 @@ export const LIMITS = {
 } as const;
 
 // Max characters per kind of text. Big-number fields are nowrap, so they
-// overflow sideways rather than wrapping.
-export const LEN = { big: 6, tag: 14, label: 32, line: 100, sentence: 160, para: 240, long: 400 } as const;
+// overflow sideways rather than wrapping. `finding` is the scorecard line.
+export const LEN = { big: 6, tag: 14, label: 32, finding: 56, line: 100, sentence: 160, para: 240, long: 400 } as const;
+
+/** The validation message runWriter treats as a display-text length overrun. */
+export function overLen(path: string, length: number, max: number): string {
+  return `${path}: ${length} characters, at most ${max}`;
+}
 
 export class ReportError extends Error {}
 
@@ -38,7 +43,7 @@ function obj(v: unknown, path: string): Obj {
 
 function str(v: unknown, path: string, max: number): string {
   if (typeof v !== "string" || !v.trim()) fail(path, "expected a non-empty string");
-  if (v.length > max) fail(path, `longer than ${max} characters (${v.length})`);
+  if (v.length > max) fail(path, `${v.length} characters, at most ${max}`);
   return v;
 }
 
@@ -114,7 +119,7 @@ function parseFields(input: unknown, complete: boolean): PartialReport {
     if (Array.isArray(x)) {
       const parts = list(x, p, 1, 4, part);
       const total = parts.reduce((n, y) => n + (typeof y === "string" ? y : y.text).length, 0);
-      if (total > max) fail(p, `longer than ${max} characters (${total})`);
+      if (total > max) fail(p, `${total} characters, at most ${max}`);
       return parts;
     }
     return part(x, p);
@@ -128,7 +133,7 @@ function parseFields(input: unknown, complete: boolean): PartialReport {
     return {
       rating: oneOf(o.rating, `${p}.rating`, RATINGS),
       key_figure: { value: str(k.value, `${p}.key_figure.value`, LEN.big), unit: str(k.unit, `${p}.key_figure.unit`, LEN.tag) },
-      finding: str(o.finding, `${p}.finding`, 56),
+      finding: str(o.finding, `${p}.finding`, LEN.finding),
       ...cite(o, p),
     };
   };

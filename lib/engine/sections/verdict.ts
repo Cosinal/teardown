@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
-import { LEN } from "../validate";
+import { LEN, overLen } from "../validate";
 import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, pointsElsewhere } from "./brief";
 import { runWriter, type Revision, type SectionOptions } from "./common";
 import { THIN } from "./demand";
@@ -48,7 +48,7 @@ export function parseVerdict(raw: unknown, ctx: LaterContext): VerdictSection {
     const v = get(section, k);
     const path = k === "summary" ? "summary" : `page_summaries.${k}`;
     if (!v.trim()) throw new Error(`${path}: empty`);
-    if (v.length > LEN.sentence) throw new Error(`${path}: ${v.length} characters, at most ${LEN.sentence}`);
+    if (v.length > LEN.sentence) throw new Error(overLen(path, v.length, LEN.sentence));
     checkFigures(v, ctx.known, path);
   }
   if (pointsElsewhere(section.summary)) throw new Error("summary: page 1 stands alone, so don't refer to other pages or to \"above\" or \"below\"");

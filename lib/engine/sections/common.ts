@@ -21,15 +21,15 @@ export const WRITER_SHARED_PROMPT = "writer-shared.v1";
  */
 const WRITER_EFFORT = "medium";
 /**
- * Writer calls allowed per section: the first, plus two retries that are told
- * what failed. One retry lost whole teardowns, and two lost two of three test
- * runs on a one-character overrun (tests/runs-summary.md, 20-59-14) before the
- * later prompts said to aim under each limit. Since then no writer in the five
- * runs of 2026-10-13/14 needed more than two. Kept at two to keep runs under
- * the time limit: a retry only re-reads the cached context, and when the
- * problem is one text field it asks for that field alone (see runWriter).
+ * Writer calls allowed per section for structural errors: the first, plus two
+ * retries that are told what failed. Length overruns on display-text fields are
+ * different (see runWriter): one cheap repair, then a word-boundary truncate,
+ * so a 60-character scorecard.finding does not kill the run.
  */
 export const WRITE_ATTEMPTS = 3;
+
+/** One extra writer call to shorten over-limit display-text fields. Then we truncate. */
+export const LENGTH_REPAIR_ATTEMPTS = 1;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -266,6 +266,8 @@ export function parseJsonText(text: string): unknown {
 
 export const WRITE_INSTRUCTION = "Write the section now. Reply with the JSON object only.";
 
+const FIELD_PATH = /^([A-Za-z_]\w*(?:\[\d+\]|\.[A-Za-z_]\w*)*)/;
+
 /**
  * The field a validation problem names, e.g. "tests[0].description" from
  * "tests[0].description: 68 characters, at most 64", or null.
@@ -274,17 +276,50 @@ export function problemField(problem: string): string | null {
   return problem.match(/^([A-Za-z_]\w*(?:\[\d+\]|\.[A-Za-z_]\w*)*): /)?.[1] ?? null;
 }
 
+/**
+ * A display-text length overrun, or null when the problem is anything else
+ * (missing fields, wrong types, source rules). Only this shape is repaired
+ * then truncated; structural errors stay fatal.
+ */
+export interface LengthOverrun {
+  field: string;
+  max: number;
+  length?: number;
+}
+
+export function lengthOverrun(problem: string): LengthOverrun | null {
+  const msg = problem.trim();
+  const field = FIELD_PATH.exec(msg)?.[1];
+  if (!field || msg[field.length] !== ":") return null;
+  const rest = msg.slice(field.length + 2);
+  let m = rest.match(/^(\d+) characters, at most (\d+)$/);
+  if (m) return { field, max: Number(m[2]), length: Number(m[1]) };
+  m = rest.match(/^(\d+) characters; .* at most (\d+)$/);
+  if (m) return { field, max: Number(m[2]), length: Number(m[1]) };
+  m = rest.match(/^longer than (\d+) characters \((\d+)\)$/);
+  if (m) return { field, max: Number(m[1]), length: Number(m[2]) };
+  m = rest.match(/^longer than (\d+) characters(?: in total)?$/);
+  if (m) return { field, max: Number(m[1]) };
+  return null;
+}
+
 function pathKeys(path: string): (string | number)[] {
   return [...path.matchAll(/([A-Za-z_]\w*)|\[(\d+)\]/g)].map((m) => (m[2] === undefined ? m[1] : Number(m[2])));
 }
 
-/** The string at `path` in `json`, or undefined if there is none. */
-export function stringAt(json: unknown, path: string): string | undefined {
+/** The value at `path` in `json`, or undefined if there is none. */
+export function valueAt(json: unknown, path: string): unknown {
   let v: unknown = json;
   for (const k of pathKeys(path)) {
     if (typeof v !== "object" || v === null) return undefined;
     v = (v as Record<string | number, unknown>)[k];
   }
+  return v;
+}
+
+/** The string at `path` in `json`, or undefined if there is none. */
+export function stringAt(json: unknown, path: string): string | undefined {
+  const v = valueAt(json, path);
   return typeof v === "string" ? v : undefined;
 }
 
@@ -296,6 +331,101 @@ export function withString(json: unknown, path: string, value: string): unknown 
   for (const k of keys.slice(0, -1)) v = v[k] as Record<string | number, unknown>;
   v[keys.at(-1)!] = value;
   return copy;
+}
+
+/**
+ * The path of a truncatable string in writer JSON. Report validation names
+ * scorecard rows as `scorecard.alternatives.finding`; writers use `scorecard.finding`.
+ */
+export function resolveTextPath(json: unknown, path: string): string | undefined {
+  if (stringAt(json, path) !== undefined) return path;
+  const mapped = path.replace(/^scorecard\.[a-z_]+\./, "scorecard.");
+  if (mapped !== path && stringAt(json, mapped) !== undefined) return mapped;
+  if (stringAt(json, `${path}.text`) !== undefined) return `${path}.text`;
+  if (mapped !== path && stringAt(json, `${mapped}.text`) !== undefined) return `${mapped}.text`;
+  if (path.endsWith(".text")) {
+    const parent = path.slice(0, -5);
+    if (Array.isArray(valueAt(json, parent)) && stringAt(json, `${parent}[0].text`) !== undefined) {
+      return `${parent}[0].text`;
+    }
+  }
+  return undefined;
+}
+
+function partTextPaths(json: unknown, path: string): string[] {
+  const mapped = path.replace(/^scorecard\.[a-z_]+\./, "scorecard.");
+  const at = Array.isArray(valueAt(json, path)) ? path : Array.isArray(valueAt(json, mapped)) ? mapped : null;
+  if (!at) return [];
+  const v = valueAt(json, at) as unknown[];
+  return v.flatMap((_, i) => {
+    const p = `${at}[${i}]`;
+    if (typeof valueAt(json, p) === "string") return [p];
+    if (stringAt(json, `${p}.text`) !== undefined) return [`${p}.text`];
+    return [];
+  });
+}
+
+/** Cut `s` to `max` characters at a word boundary, with an ellipsis. */
+export function truncateAtWord(s: string, max: number): string {
+  if (s.length <= max) return s;
+  if (max <= 0) return "";
+  const ellipsis = "…";
+  if (max <= ellipsis.length) return ellipsis.slice(0, max);
+  const budget = max - ellipsis.length;
+  let cut = s.slice(0, budget);
+  const sp = cut.lastIndexOf(" ");
+  if (sp >= Math.min(8, Math.max(1, Math.floor(budget * 0.5)))) cut = cut.slice(0, sp);
+  cut = cut.replace(/[\s.,;:!?]+$/, "");
+  const out = `${cut}${ellipsis}`;
+  return out.length <= max ? out : `${s.slice(0, max - ellipsis.length)}${ellipsis}`;
+}
+
+/** Shorten the named display-text field (or the texts of its parts) to `overrun.max`. */
+export function applyLengthOverrun(json: unknown, overrun: LengthOverrun): unknown {
+  const stringPath = resolveTextPath(json, overrun.field);
+  if (stringPath) return withString(json, stringPath, truncateAtWord(stringAt(json, stringPath)!, overrun.max));
+  const parts = partTextPaths(json, overrun.field);
+  if (!parts.length) return json;
+  let total = parts.reduce((n, p) => n + stringAt(json, p)!.length, 0);
+  if (total <= overrun.max) return json;
+  let out = json;
+  for (let i = parts.length - 1; i >= 0 && total > overrun.max; i--) {
+    const s = stringAt(out, parts[i])!;
+    const others = total - s.length;
+    const room = overrun.max - others;
+    const next = room < 1
+      ? (i === 0 ? truncateAtWord(s, Math.max(1, overrun.max)) : "…")
+      : truncateAtWord(s, room);
+    out = withString(out, parts[i], next);
+    total = others + next.length;
+  }
+  return out;
+}
+
+function recoverLength<T>(json: unknown, parse: (v: unknown) => T, first: LengthOverrun): { value: T; notes: string[] } | null {
+  const notes: string[] = [];
+  let cur = json;
+  let overrun: LengthOverrun | null = first;
+  for (let i = 0; i < 32 && overrun; i++) {
+    const next = applyLengthOverrun(cur, overrun);
+    if (JSON.stringify(next) === JSON.stringify(cur)) return null;
+    notes.push(`truncated ${overrun.field} to at most ${overrun.max} characters`);
+    cur = next;
+    try {
+      return { value: parse(structuredClone(cur)), notes };
+    } catch (err) {
+      overrun = lengthOverrun(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return null;
+}
+
+function lengthRepairAsk(problem: string, overrun: LengthOverrun, patching: string | null): string {
+  const count = overrun.length != null ? ` (it is ${overrun.length} characters)` : "";
+  if (patching) {
+    return `That JSON failed validation: ${problem}\n${patching} is over its hard limit of ${overrun.max} characters${count}. Rewrite only that field shorter (count its characters), keeping every rule above. Reply with a JSON object holding just that field, as {${JSON.stringify(patching)}: "..."}.`;
+  }
+  return `That JSON failed validation: ${problem}\nShorten ${overrun.field} to at most ${overrun.max} characters${count} (count them), and any other display-text field over its hard limit. Reply with the whole JSON object again.`;
 }
 
 /** A writer that never produced valid JSON, with what its calls cost. */
@@ -316,12 +446,15 @@ export interface Revision {
  * a complete object is stripped (see jsonValues); when several objects are in
  * the reply, the last one that passes `parse` wins — a short stub then the
  * real section is the demand_evidence shape, and taking the stub would still
- * fail the run. On a validation error it retries (up to WRITE_ATTEMPTS calls
- * in all), telling the writer what failed. When the problem is one text field
- * in its reply (most are a field over its character limit), the retry asks for
- * that field alone and puts it into the last reply, so the writer doesn't write
- * the whole section again. Anything else (invalid JSON, a rule across fields, a
- * field the reply doesn't have) asks for the whole object again.
+ * fail the run.
+ *
+ * A length overrun on a display-text field is not fatal: one repair call asks
+ * the writer to shorten the named fields (same cached research, no new
+ * searches), and if they are still over, the field is truncated at a word
+ * boundary with an ellipsis. Structural errors (missing fields, wrong types,
+ * citation rules) still retry up to WRITE_ATTEMPTS calls and then fail the run.
+ * When the problem is one text field in its reply, the retry asks for that
+ * field alone and puts it into the last reply.
  */
 export async function runWriter<T>(
   stage: Stage,
@@ -340,6 +473,21 @@ export async function runWriter<T>(
   /** The last whole reply that was valid JSON, and the field the last retry asked for, if it asked for one. */
   let last: unknown;
   let patching: string | null = null;
+  let lengthRepairs = 0;
+  const done = (value: T) => ({
+    value,
+    run: {
+      stage, step: (revise ? "revise" : "write") as "revise" | "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
+      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+      ...(retries.length && { retries }),
+    },
+  });
+  const fail = (problem: string): never => {
+    throw new WriterError(`${stage}: writer output invalid: ${problem}`, {
+      stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
+      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(), retries: [...retries, problem.slice(0, 500)],
+    });
+  };
   for (let attempt = 1; ; attempt++) {
     const msg = await anthropic().messages.create(writerParams({ model, context, finished, sectionPrompt }, messages), requestOptions());
     usage = addUsage(usage, msg.usage);
@@ -362,20 +510,14 @@ export async function runWriter<T>(
             const fixed = (json as Record<string, unknown>)[patching] ?? stringAt(json, patching);
             if (typeof fixed !== "string") throw new Error(`the reply has no string for ${patching}`);
             json = withString(last, patching, fixed);
+            last = json;
           } else if (i === 0) {
             last = json;
           }
           // Parsers may change what they are given; `last` must stay the reply as sent.
           const value = parse(structuredClone(json));
           last = json;
-          return {
-            value,
-            run: {
-              stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
-              cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
-              ...(retries.length && { retries }),
-            },
-          };
+          return done(value);
         } catch (err) {
           problem = err instanceof Error ? err : new Error(String(err));
         }
@@ -383,13 +525,27 @@ export async function runWriter<T>(
       throw problem;
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err);
-      if (attempt >= WRITE_ATTEMPTS) {
-        // The spend is real even though the section failed; callers that recover from this can record it.
-        throw new WriterError(`${stage}: writer output invalid: ${problem}`, {
-          stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
-          cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(), retries: [...retries, problem.slice(0, 500)],
-        });
+      const overrun = last !== undefined ? lengthOverrun(problem) : null;
+      if (overrun && last !== undefined) {
+        if (lengthRepairs < LENGTH_REPAIR_ATTEMPTS && attempt < WRITE_ATTEMPTS) {
+          lengthRepairs++;
+          retries.push(problem.slice(0, 500));
+          const named = resolveTextPath(last, overrun.field);
+          patching = named ?? null;
+          messages.push(
+            { role: "assistant", content: text || "(empty reply)" },
+            { role: "user", content: lengthRepairAsk(problem, overrun, patching) },
+          );
+          continue;
+        }
+        const recovered = recoverLength(last, parse, overrun);
+        if (recovered) {
+          retries.push(problem.slice(0, 500), ...recovered.notes);
+          return done(recovered.value);
+        }
+        fail(problem);
       }
+      if (attempt >= WRITE_ATTEMPTS) fail(problem);
       retries.push(problem.slice(0, 500));
       const field = problemField(problem);
       patching = last !== undefined && field && stringAt(last, field) !== undefined ? field : null;

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import type { Assumption, Rating } from "../types";
-import { LIMITS } from "../validate";
+import { LIMITS, overLen } from "../validate";
 import { INTERNAL_NOTE, REPORT_SOURCE, checkFigures, internalSource, pointsElsewhere } from "./brief";
 import { runWriter, type Revision, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
@@ -54,7 +54,7 @@ export function parseAssumptions(raw: unknown, ctx: LaterContext): AssumptionsSe
     const path = `assumptions[${i}]`;
     for (const [k, max] of [["statement", 90], ["short", 100], ["if_false", 100], ["evidence", 200]] as const) {
       if (!a[k].trim()) throw new Error(`${path}.${k}: empty`);
-      if (a[k].length > max) throw new Error(`${path}.${k}: ${a[k].length} characters, at most ${max}`);
+      if (a[k].length > max) throw new Error(overLen(`${path}.${k}`, a[k].length, max));
       checkFigures(a[k], ctx.known, `${path}.${k}`);
     }
   });
