@@ -2,14 +2,14 @@ import { factcheckSection, runFactcheck, type CheckOptions, type CheckResult, ty
 import { memoryPageCache } from "./fetch";
 import type { IntakeInput } from "./input";
 import { runIntake, type IdeaSpec } from "./intake";
-import { STAGE_MODELS, type ClaimCheck, type StageRun } from "./llm";
+import { DeadlineError, STAGE_MODELS, currentBudget, type ClaimCheck, type StageRun } from "./llm";
 import { buildReport, type Drafts } from "./report";
 import { runResearch, type ResearchOptions, type SearchResponse, type Source, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, writeAlternatives, type AlternativesOptions, type AlternativesSection } from "./sections/alternatives";
 import { assumptionsCheck, reportSource, writeAssumptions, type AssumptionsSection } from "./sections/assumptions";
 import { blockersCheck, writeBlockers, type BlockersSection } from "./sections/blockers";
 import { factcheckInternal, reviseFeedback } from "./sections/brief";
-import { WriterError, mergeResearch, searchSection, writerContext, type Revision, type SectionOptions } from "./sections/common";
+import { WriterError, mergeResearch, searchSection, warmWriterCache, writerContext, type Revision, type SectionOptions } from "./sections/common";
 import { SECTIONS } from "./sections/config";
 import { DEMAND_RESEARCH_PROMPT, demandCheck, writeDemand, type DemandSection } from "./sections/demand";
 import { distributionCheck, writeDistribution, type DistributionSection } from "./sections/distribution";
@@ -94,39 +94,88 @@ const RESEARCH_PROMPTS = { alternatives: ALTERNATIVES_RESEARCH_PROMPT, demand_ev
 type Searching = keyof typeof LABELS;
 const SEARCHING = Object.keys(LABELS) as Searching[];
 
+type RecordRun = (run: StageRun | null) => Promise<void>;
+
+/**
+ * Writers run at once. Every writer's spend is recorded, a failed one's too,
+ * before the first failure is rethrown (the caller records that one's: see store.ts).
+ */
+async function together<P extends readonly Promise<{ run: StageRun }>[]>(record: RecordRun, writes: P): Promise<{ -readonly [K in keyof P]: Awaited<P[K]> }> {
+  const settled = await Promise.allSettled(writes);
+  const failed = settled.find((o) => o.status === "rejected");
+  for (const o of settled) {
+    if (o.status === "fulfilled") await record(o.value.run);
+    else if (o !== failed && o.reason instanceof WriterError) await record(o.reason.run);
+  }
+  if (failed) throw failed.reason;
+  return settled.map((o) => (o as PromiseFulfilledResult<unknown>).value) as { -readonly [K in keyof P]: Awaited<P[K]> };
+}
+
+/**
+ * The three sections with their own research, written from the shared
+ * context. A call that generates nothing writes the context to the cache first, so all
+ * three start at once and read it. If that call fails, Existing Alternatives
+ * is written first (writing the cache) and the other two after it, as before.
+ */
+export async function writeFirstSections(context: string, sources: SourceStore, input: IntakeInput, options: StageOptions, record: RecordRun) {
+  const rest = () => [
+    writeDemand(context, sources, options.demand_evidence),
+    writeEconomics(context, sources, options.economics, founderPrice(input)),
+  ] as const;
+  const warm = await warmWriterCache(options.alternatives?.model ?? STAGE_MODELS.alternatives, context).catch((err: unknown) => {
+    if (err instanceof DeadlineError || currentBudget()?.expired) throw err;
+    console.error(`Writer cache warm-up failed, writing Existing Alternatives first: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  });
+  if (warm) {
+    await record(warm);
+    return together(record, [writeAlternatives(context, sources, options.alternatives), ...rest()] as const);
+  }
+  const [alt] = await together(record, [writeAlternatives(context, sources, options.alternatives)] as const);
+  const [demand, econ] = await together(record, rest());
+  return [alt, demand, econ] as const;
+}
+
 /**
  * Intake, shared research, the three searching sections' own research (all at
  * once, merged in a fixed order), their writers, then fact-check of each.
  * Every section's research finishes before any writer starts, so all writers
- * share one cached context: the first writer writes it, and the rest read it.
- * Then the six sections with no research, each from the same context plus the
- * finished, fact-checked sections so far: Idea, Distribution and Blockers
- * together, then Riskiest Assumptions, then Next Tests, then Verdict (with the
- * page summaries) last. Fact-check runs one section at a time, so each sees
- * the page quotes the previous one added, with one page cache.
+ * share one cached context: a call that generates nothing writes it, then the three
+ * writers run at once and read it. Then the six sections with no research,
+ * each from the same context plus the finished, fact-checked sections so far:
+ * Idea, Distribution and Blockers together, then Riskiest Assumptions (ranked
+ * by their scorecard), then Next Tests (each checks an assumption by rank),
+ * then Verdict (with the page summaries) last. Fact-check runs one section at
+ * a time, so each sees the page quotes the previous one added, with one page cache.
+ * Within the run's time budget (llm.ts Budget, set by runStages): past the soft
+ * limit fact-check revisions are skipped, and at the hard deadline the run throws.
  * Billable: callers must gate this behind payment (see CLAUDE.md).
  */
 export async function runPipeline(input: IntakeInput, options: StageOptions = {}, hooks: PipelineHooks = {}): Promise<StagesResult> {
   const runs: StageRun[] = [];
-  const record = async (run: StageRun | null) => {
+  const record: RecordRun = async (run) => {
     if (!run) return;
     runs.push(run);
     await hooks.run?.(run);
   };
+  const status = async (s: TeardownStatus) => {
+    currentBudget()?.check();
+    await hooks.status?.(s);
+  };
 
-  await hooks.status?.("intake");
+  await status("intake");
   const intake = await runIntake(input, options.intake);
   await hooks.intake?.(intake.spec);
   await record(intake.run);
   const spec = intake.spec;
 
-  await hooks.status?.("research");
+  await status("research");
   const research = await runResearch(spec, options.research);
   await hooks.research?.(research.sources, research.notes);
   await record(research.run);
 
   // Only the searching sections make research calls; config.ts gives the rest 0 searches.
-  await hooks.status?.("section_research");
+  await status("section_research");
   const searched = await Promise.all(SEARCHING.map((name) => searchSection(name, {
     spec, store: research.sources, notes: research.notes,
     searches: options[name]?.maxSearches ?? SECTIONS[name].searches,
@@ -142,21 +191,14 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
     await record(own[name].run);
   }
 
-  await hooks.status?.("writing");
+  await status("writing");
   const context = writerContext(spec, sources, [
     { label: "Shared research", text: research.notes },
     ...SEARCHING.map((name) => ({ label: `${LABELS[name]} research`, text: own[name].notes })),
   ]);
-  const altWrite = await writeAlternatives(context, sources, options.alternatives);
-  await record(altWrite.run);
-  const [demandWrite, econWrite] = await Promise.all([
-    writeDemand(context, sources, options.demand_evidence),
-    writeEconomics(context, sources, options.economics, founderPrice(input)),
-  ]);
-  await record(demandWrite.run);
-  await record(econWrite.run);
+  const [altWrite, demandWrite, econWrite] = await writeFirstSections(context, sources, input, options, record);
 
-  await hooks.status?.("factcheck");
+  await status("factcheck");
   const fc = { ...options.factcheck, pages: options.factcheck?.pages ?? memoryPageCache() };
   const finish = async <T>(name: string, draft: T, checked: FactcheckOutput<T>, research?: ReturnType<typeof mergeResearch>): Promise<SectionResult<T>> => {
     sources = checked.sources;
@@ -187,7 +229,8 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
     const run = (section: T) => factcheckInternal(name, check, section, sources, own, fc);
     let checked = await run(draft);
     const feedback = reviseFeedback(checked.log);
-    if (feedback) {
+    // A revision is optional: past the soft time limit the checked first draft stands.
+    if (feedback && !currentBudget()?.overSoft) {
       try {
         const revised = await write({ draft, feedback });
         await record(revised.run);
@@ -209,11 +252,10 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   const drafts: Partial<Drafts> = { alternatives: alternatives.section, demand_evidence: demand.section, economics: economics.section };
   const round = () => laterContext(spec, sources, drafts, context);
 
-  await hooks.status?.("writing");
+  await status("writing");
   let ctx = round();
-  const [ideaWrite, distWrite, blockWrite] = await Promise.all([writeIdea(ctx), writeDistribution(ctx), writeBlockers(ctx)]);
-  for (const w of [ideaWrite, distWrite, blockWrite]) await record(w.run);
-  await hooks.status?.("factcheck");
+  const [ideaWrite, distWrite, blockWrite] = await together(record, [writeIdea(ctx), writeDistribution(ctx), writeBlockers(ctx)] as const);
+  await status("factcheck");
   const round1 = ctx;
   const idea = await internal("idea", ideaWrite.value, (r) => writeIdea(round1, {}, r), ideaCheck(round1), [ideaSource(round1)]);
   const distribution = await finish("distribution", distWrite.value,
@@ -222,17 +264,17 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
     await factcheckSection("blockers", blockersCheck(ctx), blockWrite.value, sources, fc));
   Object.assign(drafts, { idea: idea.section, distribution: distribution.section, blockers: blockers.section });
 
-  await hooks.status?.("writing");
+  await status("writing");
   ctx = round();
   const assumeWrite = await writeAssumptions(ctx);
   await record(assumeWrite.run);
-  await hooks.status?.("factcheck");
+  await status("factcheck");
   const round2 = ctx;
   const assumptions = await internal("riskiest_assumptions", assumeWrite.value, (r) => writeAssumptions(round2, {}, r),
     assumptionsCheck(round2), [reportSource(round2)]);
   drafts.riskiest_assumptions = assumptions.section;
 
-  await hooks.status?.("writing");
+  await status("writing");
   ctx = round();
   const testsWrite = await writeTests(ctx);
   await record(testsWrite.run);
@@ -243,14 +285,14 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   ctx = round();
   const verdictWrite = await writeVerdict(ctx);
   await record(verdictWrite.run);
-  await hooks.status?.("factcheck");
+  await status("factcheck");
   const round4 = ctx;
   const verdict = await internal("verdict", verdictWrite.value, (r) => writeVerdict(round4, {}, r), verdictCheck(round4), [reportSource(round4)]);
   drafts.verdict = verdict.section;
 
   const report = buildReport(drafts as Drafts, sources, ctx.build);
   await hooks.report?.(report);
-  await hooks.status?.("done");
+  await status("done");
   return {
     spec,
     sources,

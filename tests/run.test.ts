@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ZERO_USAGE, type StageRun } from "../lib/engine/llm";
+import { ZERO_USAGE, currentBudget, type StageRun } from "../lib/engine/llm";
 import { WriterError } from "../lib/engine/sections/common";
 
 // Running a teardown from the app: the atomic claim, startRun, and the admin
@@ -26,6 +26,12 @@ vi.mock("@/lib/db", () => ({
 
 const runPipeline = vi.fn();
 vi.mock("../lib/engine/pipeline", () => ({ runPipeline: (...args: unknown[]) => runPipeline(...args) }));
+
+const refundPayment = vi.fn();
+vi.mock("@/lib/stripe", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stripe")>()),
+  refundPayment: (...args: unknown[]) => refundPayment(...args),
+}));
 
 const after = vi.fn();
 vi.mock("next/server", () => ({ after: (fn: () => unknown) => after(fn) }));
@@ -65,6 +71,7 @@ beforeEach(() => {
   queries.length = 0;
   respond = () => [];
   runPipeline.mockReset();
+  refundPayment.mockReset();
   after.mockReset();
   cookie.value = undefined;
   vi.unstubAllEnvs();
@@ -279,5 +286,55 @@ describe("stale-run sweep", () => {
       expect(queries.some((q) => staleSql(q.text))).toBe(false);
       expect(el.props.t.status).toBe(status);
     });
+  });
+});
+
+describe("a run that passes its time budget", () => {
+  it("ends failed before Vercel's limit and is refunded once, also when the page loads it later", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("DATABASE_URL", "postgres://mock");
+    vi.stubEnv("ADMIN_KEY", "s3cret");
+    cookie.value = adminCookieValue();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // The row, as the database would keep it.
+    const row = { status: "queued", error: null as string | null, payment_intent: "pi_1", refunded_at: null as string | null };
+    respond = (t) => {
+      const q = queries.at(-1)!;
+      if (claimSql(t)) {
+        row.status = "intake";
+        return [{ id: "abc", input: INPUT }];
+      }
+      if (failedSql(t)) [row.status, row.error] = q.values as [string, string];
+      if (t.startsWith("UPDATE teardowns SET refunded_at = now()")) {
+        if (row.status !== "failed" || row.refunded_at) return [];
+        row.refunded_at = "now";
+        return [{ payment_intent: row.payment_intent }];
+      }
+      // The stale sweep only matches a row still in progress.
+      if (t.startsWith("UPDATE teardowns SET status = 'failed'")) return [];
+      if (t.startsWith("SELECT status, idea, report")) return [{ ...row, idea: "Bike repair van", report: null, owner_token_hash: null }];
+      return [];
+    };
+    // A step that never returns until the run's deadline aborts it, as an API call does.
+    runPipeline.mockImplementation(() => new Promise((_, reject) => {
+      currentBudget()!.signal.addEventListener("abort", () => reject(new Error("Request was aborted.")));
+    }));
+
+    const t0 = Date.now();
+    let ended = 0;
+    const done = startRun("abc").then(() => { ended = Date.now(); });
+    await vi.advanceTimersByTimeAsync(300_000);
+    await done;
+    vi.useRealTimers();
+
+    expect(ended - t0).toBe(275_000);
+    expect(row).toMatchObject({ status: "failed", error: "Run passed its 275 s time budget", refunded_at: "now" });
+    expect(refundPayment).toHaveBeenCalledExactlyOnceWith("pi_1");
+    expect(errors).toHaveBeenCalledWith("Teardown abc failed: Run passed its 275 s time budget");
+
+    // The owner opens /t/abc: the row is already failed and refunded, so nothing is swept or refunded again.
+    const el = (await TeardownPage({ params: Promise.resolve({ id: "abc" }) })) as { props: { t: { status: string; refunded: boolean } } };
+    expect(el.props.t).toMatchObject({ status: "failed", refunded: true });
+    expect(refundPayment).toHaveBeenCalledOnce();
   });
 });

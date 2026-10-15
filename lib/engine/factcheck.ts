@@ -1,7 +1,7 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { fetchPage, memoryPageCache, normalizeForMatch, pageLoader, pageWindow, quoteInText, type PageCache, type PageResult } from "./fetch";
-import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, sumUsage, type ClaimCheck, type StageRun, type TokenUsage } from "./llm";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, requestOptions, sumUsage, type ClaimCheck, type StageRun, type TokenUsage } from "./llm";
 import { SOURCE_BUDGETS, isNotPublic } from "./report";
 import type { Source, SourceStore } from "./research";
 import { parseAlternatives, type AlternativesSection, type Part } from "./sections/alternatives";
@@ -451,7 +451,7 @@ async function judge(claim: CheckClaim, source: Source | undefined, model: strin
       // it is cached; the claim (and page) after it varies per call.
       system: [{ type: "text", text: loadPrompt(FACTCHECK_PROMPT), cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: claimRequest(claim, source, page) }],
-    });
+    }, requestOptions());
     usage = addUsage(usage, msg.usage);
     assertFinished(msg, "factcheck");
     if (msg.parsed_output) return { r: msg.parsed_output, usage, model: msg.model };
@@ -611,7 +611,7 @@ export async function runFactcheck(section: AlternativesSection, store: SourceSt
       output_config: { effort: "medium", format: zodOutputFormat(GapSchema) },
       system: loadPrompt(FACTCHECK_GAP_PROMPT),
       messages: [{ role: "user", content: gapRepairRequest(section.market_gap, out.market_gap, checked.log) }],
-    });
+    }, requestOptions());
     usage = addUsage(usage, msg.usage);
     assertFinished(msg, "factcheck");
     const gap = msg.parsed_output && assembleGap(out.market_gap, msg.parsed_output, supportedGapParts(out.market_gap, checked.log));

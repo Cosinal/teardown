@@ -2,7 +2,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { IntakeInput } from "./input";
 import { BILLING, BILLING_LABEL } from "./input";
-import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, type StageRun } from "./llm";
+import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, requestOptions, type StageRun } from "./llm";
 
 export const INTAKE_PROMPT = "intake.v2";
 
@@ -81,7 +81,7 @@ export async function runIntake(
     output_config: { effort: "medium", format: zodOutputFormat(IdeaSpecSchema) },
     system: loadPrompt(INTAKE_PROMPT),
     messages: [{ role: "user", content: formatInput(input) }],
-  });
+  }, requestOptions());
   assertFinished(msg, "intake");
   if (!msg.parsed_output) throw new Error("intake: no structured output");
   const spec = parseIdeaSpec(msg.parsed_output);

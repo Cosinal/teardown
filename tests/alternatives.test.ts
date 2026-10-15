@@ -221,14 +221,14 @@ describe("section stages (Anthropic mocked)", () => {
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 
-  it("gives up after three retries, keeping what the calls cost", async () => {
+  it("gives up after two retries, keeping what the calls cost", async () => {
     create.mockResolvedValue(reply("I could not find enough sources."));
     const err = await writeAlternatives("ctx", store).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(WriterError);
     expect((err as WriterError).message).toMatch(/alternatives: writer output invalid: no JSON object/);
-    expect((err as WriterError).run).toMatchObject({ stage: "alternatives", step: "write", usage: { input_tokens: 4000 } });
-    expect((err as WriterError).run.retries).toHaveLength(4);
-    expect(create).toHaveBeenCalledTimes(4);
+    expect((err as WriterError).run).toMatchObject({ stage: "alternatives", step: "write", usage: { input_tokens: 3000 } });
+    expect((err as WriterError).run.retries).toHaveLength(3);
+    expect(create).toHaveBeenCalledTimes(3);
   });
 
   it("revises an earlier draft with fact-check's feedback", async () => {
