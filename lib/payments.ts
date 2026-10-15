@@ -46,8 +46,9 @@ export function isOwnerToken(token: string | null | undefined, hash: string | nu
  * from two checkout tabs, or paid for a row that isn't waiting) is refunded.
  * A replay of the event that queued the row matches and does nothing.
  */
-export async function markPaid(id: string, paymentIntent: string): Promise<boolean> {
-  const rows = await sql()`UPDATE teardowns SET status = 'queued', payment_intent = ${paymentIntent}, updated_at = now()
+export async function markPaid(id: string, paymentIntent: string, amountCents: number | null = null): Promise<boolean> {
+  const amount = Number.isInteger(amountCents) && (amountCents as number) >= 0 ? amountCents : null;
+  const rows = await sql()`UPDATE teardowns SET status = 'queued', payment_intent = ${paymentIntent}, paid_at = now(), amount_cents = ${amount}, updated_at = now()
     WHERE id = ${id} AND status = 'awaiting_payment' RETURNING id`;
   if (rows.length) return true;
   const found = await sql()`SELECT payment_intent FROM teardowns WHERE id = ${id}`;

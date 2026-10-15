@@ -71,7 +71,7 @@ function completed(id: string, pi = "pi_1", extra: Record<string, unknown> = {})
   return {
     id: `evt_${Math.random().toString(36).slice(2)}`, object: "event", type: "checkout.session.completed",
     data: { object: { id: "cs_test_1", object: "checkout.session", client_reference_id: id, metadata: { teardown_id: id },
-      payment_intent: pi, payment_status: "paid", ...extra } },
+      payment_intent: pi, payment_status: "paid", amount_total: 700, ...extra } },
   };
 }
 
@@ -90,7 +90,7 @@ function rowDb(row: { status: string; payment_intent?: string | null; refunded_a
       if (r.status !== "awaiting_payment") return [];
       r.status = "queued";
       r.payment_intent = v[0] as string;
-      return [{ id: v[1] }];
+      return [{ id: v[v.length - 1] }];
     }
     if (t.startsWith("SELECT payment_intent")) return [{ payment_intent: r.payment_intent }];
     if (claimSql(t)) {
@@ -161,9 +161,9 @@ describe("webhook", () => {
     const res = await deliver(completed("abc", "pi_1"));
     expect(res.status).toBe(200);
     expect(queries[0].text).toBe(
-      "UPDATE teardowns SET status = 'queued', payment_intent = $, updated_at = now() WHERE id = $ AND status = 'awaiting_payment' RETURNING id",
+      "UPDATE teardowns SET status = 'queued', payment_intent = $, paid_at = now(), amount_cents = $, updated_at = now() WHERE id = $ AND status = 'awaiting_payment' RETURNING id",
     );
-    expect(queries[0].values).toEqual(["pi_1", "abc"]);
+    expect(queries[0].values).toEqual(["pi_1", 700, "abc"]);
     expect(after).toHaveBeenCalledOnce();
     expect(runPipeline).not.toHaveBeenCalled();
   });

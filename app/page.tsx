@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Join from "@/components/Join";
+import Track from "@/components/Track";
 import "@/styles/home.css";
 
 export const metadata: Metadata = {
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
+      <Track path="/" />
       <header><div className="wrap"><span>Teardown</span><span>Market Readouts</span></div></header>
       <main><div className="wrap">
         <p className="eyebrow">Opening soon</p>

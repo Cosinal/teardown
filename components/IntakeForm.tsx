@@ -74,6 +74,11 @@ export default function IntakeForm({ values = {}, admin = false }: { values?: Re
       </fieldset>
 
       {v.draft && <input type="hidden" name="draft" value={v.draft} />}
+      {v.ref && <input type="hidden" name="ref" defaultValue={v.ref} />}
+      {v.utm_source && <input type="hidden" name="utm_source" defaultValue={v.utm_source} />}
+      {v.utm_medium && <input type="hidden" name="utm_medium" defaultValue={v.utm_medium} />}
+      {v.utm_campaign && <input type="hidden" name="utm_campaign" defaultValue={v.utm_campaign} />}
+      {v.referrer && <input type="hidden" name="referrer" defaultValue={v.referrer} />}
       {admin && (
         <label className="check">
           <input type="checkbox" name="skip_payment" defaultChecked={v.idea === undefined || v.skip_payment === "on"} /> Admin: skip payment

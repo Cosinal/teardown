@@ -1,6 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-export const POLICY_VERSION = "2026-10-14";
+export const POLICY_VERSION = "2026-10-15";
 
 let client: NeonQueryFunction<false, false> | undefined;
 let ready: Promise<unknown> | undefined;
@@ -55,6 +55,24 @@ export function init() {
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS payment_intent TEXT`;
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ`;
     await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS owner_token_hash TEXT`;
+    // Dashboard: when the webhook marked the row paid, and the amount Stripe
+    // already sent (cents). Null on rows paid before this existed.
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`;
+    await q`ALTER TABLE teardowns ADD COLUMN IF NOT EXISTS amount_cents INTEGER`;
+    // First-party page views and checkout starts. Path, optional campaign
+    // codes, referring hostname, time. No IP, no cookie, no user id.
+    await q`CREATE TABLE IF NOT EXISTS events (
+      id BIGSERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      path TEXT NOT NULL,
+      ref TEXT,
+      referrer TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+    await q`CREATE INDEX IF NOT EXISTS events_kind_created_idx ON events (kind, created_at)`;
+    await q`CREATE INDEX IF NOT EXISTS events_path_idx ON events (path)`;
     await q`CREATE TABLE IF NOT EXISTS sources (
       teardown_id TEXT NOT NULL REFERENCES teardowns(id),
       source_id TEXT NOT NULL,
