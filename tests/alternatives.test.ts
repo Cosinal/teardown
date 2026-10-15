@@ -6,6 +6,7 @@ import type { IdeaSpec } from "../lib/engine/intake";
 import type { SourceStore } from "../lib/engine/research";
 import { parseAlternatives, researchAlternatives, writeAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
 import { WriterError, mergeSources, parseJsonText, runSectionResearch, runWriter, writerContext, writerParams } from "../lib/engine/sections/common";
+import { writeDemand, type DemandSection } from "../lib/engine/sections/demand";
 
 const create = vi.fn();
 vi.mock("../lib/engine/llm", async (importOriginal) => ({
@@ -146,6 +147,15 @@ describe("parseJsonText", () => {
     expect(parseJsonText('Here it is:\n```json\n{"a":{"b":[1]}}\n```')).toEqual({ a: { b: [1] } });
   });
 
+  it("extracts the first object when extra text follows on a later line (the live error shape)", () => {
+    const json = '{"a":1,"b":2}';
+    const text = `${json}\n\n{"note":"counted characters"}`;
+    // What the old first-`{` to last-`}` slice did: V8's exact demand_evidence error.
+    expect(() => JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)))
+      .toThrow(/Unexpected non-whitespace character after JSON at position \d+ \(line 3 column 1\)/);
+    expect(parseJsonText(text)).toEqual({ a: 1, b: 2 });
+  });
+
   it("names the problem when there is no valid JSON", () => {
     expect(() => parseJsonText("Sorry, no.")).toThrow(/no JSON object/);
     expect(() => parseJsonText('{"a":}')).toThrow(/not valid JSON/);
@@ -219,6 +229,31 @@ describe("section stages (Anthropic mocked)", () => {
     expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: longer than 56/);
     expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v3" });
     expect(r.run.usage.input_tokens).toBe(2000);
+  });
+
+  it("accepts a Demand Evidence reply with extra JSON after a blank line, without retrying", async () => {
+    const demand: DemandSection = {
+      signals: [{ kind: "reviews", signal: "Groomer reviews", rating: "mixed", value: "94", detail: found("reviews for one Halifax groomer", "S2") }],
+      evidence: "thin",
+      scorecard: { rating: "weak", headline: "94", unit: "reviews", finding: "Thin evidence: one review count, no search data." },
+    };
+    const body = JSON.stringify(demand);
+    create.mockResolvedValueOnce(reply(`${body}\n\n{"note":"I counted every field."}`));
+    const r = await writeDemand(writerContext(spec, store, []), store);
+    expect(r.value).toEqual(demand);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the last JSON object when the first is a stub, without retrying", async () => {
+    const demand: DemandSection = {
+      signals: [{ kind: "reviews", signal: "Groomer reviews", rating: "mixed", value: "94", detail: found("reviews for one Halifax groomer", "S2") }],
+      evidence: "thin",
+      scorecard: { rating: "weak", headline: "94", unit: "reviews", finding: "Thin evidence: one review count, no search data." },
+    };
+    create.mockResolvedValueOnce(reply(`{"signals":[]}\n\n${JSON.stringify(demand)}`));
+    const r = await writeDemand(writerContext(spec, store, []), store);
+    expect(r.value).toEqual(demand);
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after two retries, keeping what the calls cost", async () => {

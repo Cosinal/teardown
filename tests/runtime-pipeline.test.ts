@@ -38,11 +38,11 @@ const w = {
 const noCheck = () => () => ({});
 
 vi.mock("../lib/engine/intake", () => ({
-  runIntake: async () => { await sleep(STEP_MS); return { spec: { revenue_model: { billing: "one_time" } }, run: run("intake", "") }; },
+  runIntake: vi.fn(async () => { await sleep(STEP_MS); return { spec: { revenue_model: { billing: "one_time" } }, run: run("intake", "") }; }),
 }));
 vi.mock("../lib/engine/research", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/engine/research")>()),
-  runResearch: async () => { await sleep(STEP_MS); return { sources: store, notes: "Notes [S1].", run: run("research", ""), responses: [] }; },
+  runResearch: vi.fn(async () => { await sleep(STEP_MS); return { sources: store, notes: "Notes [S1].", run: run("research", ""), responses: [] }; }),
 }));
 vi.mock("../lib/engine/factcheck", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/engine/factcheck")>()),
@@ -75,6 +75,8 @@ vi.mock("../lib/engine/sections/tests", async (i) => ({ ...(await i<object>()), 
 vi.mock("../lib/engine/sections/verdict", async (i) => ({ ...(await i<object>()), writeVerdict: w.verdict, verdictCheck: noCheck }));
 
 const { runPipeline } = await import("../lib/engine/pipeline");
+const { runIntake } = await import("../lib/engine/intake");
+const { runResearch } = await import("../lib/engine/research");
 
 const INPUT = { idea: "A mobile dog grooming van.", target_customer: "Dog owners", price: "$80", billing: "one_time", geography: "Halifax" } as const;
 const NO_SEARCHES = { demand_evidence: { maxSearches: 0 }, economics: { maxSearches: 0 }, alternatives: { maxSearches: 0 } };
@@ -98,6 +100,8 @@ const revisions = () => Object.values(w).flatMap((fn) => fn.mock.calls.filter(is
 beforeEach(() => {
   vi.useFakeTimers();
   create.mockReset();
+  vi.mocked(runIntake).mockClear();
+  vi.mocked(runResearch).mockClear();
   create.mockImplementation(async () => {
     await sleep(STEP_MS);
     return { model: "claude-sonnet-5-5", stop_reason: "max_tokens", usage: { input_tokens: 1, output_tokens: 1 }, content: [] };
@@ -143,6 +147,27 @@ describe("pipeline time budget", () => {
     // The mocked steps ignore the abort signal (real API calls don't: see runtime.test.ts), so the
     // first three fact-checks finish at 7 s and the next step's check throws.
     expect(r.ms).toBe(7_000);
+  });
+
+  it("resume from saved research skips intake and searches", async () => {
+    const spec = { revenue_model: { billing: "one_time" } };
+    const budget = new Budget(240_000, 275_000);
+    const statuses: TeardownStatus[] = [];
+    const done = withBudget(budget, () => runPipeline(INPUT, {
+      ...NO_SEARCHES,
+      resume: {
+        spec: spec as never,
+        research: { sources: store, notes: "Notes [S1]." },
+        sectionSources: store,
+        sectionNotes: { demand_evidence: "Demand notes [S2]." },
+      },
+    }, { status: async (s) => { statuses.push(s); } }));
+    await vi.advanceTimersByTimeAsync(600_000);
+    await done;
+    budget.done();
+    expect(runIntake).not.toHaveBeenCalled();
+    expect(runResearch).not.toHaveBeenCalled();
+    expect(statuses.at(-1)).toBe("done");
   });
 
   it("runs the three first writers at once", async () => {

@@ -169,6 +169,18 @@ describe("first three writers", () => {
     // The failed writer's run is recorded by the caller (store.ts); the others' here.
     expect(runs.map((r) => `${r.stage}:${r.step}`).toSorted()).toEqual(["alternatives:warm", "alternatives:write", "economics:write"]);
   });
+
+  it("does not fail the run when demand_evidence JSON is followed by extra text on a later line", async () => {
+    create.mockImplementation(async (p: Params) => {
+      const name = section(p);
+      if (name === "warm") return { ...reply(""), stop_reason: "max_tokens" };
+      const body = JSON.stringify(DRAFTS[name]);
+      return reply(name === "demand_evidence" ? `${body}\n\n{"note":"extra"}` : body);
+    });
+    const { dem } = await run();
+    expect(dem.value).toEqual(demand);
+    expect(create.mock.calls.filter((c) => section(c[0] as Params) === "demand_evidence")).toHaveLength(1);
+  });
 });
 
 describe("writer retries", () => {
@@ -204,6 +216,22 @@ describe("writer retries", () => {
     create.mockResolvedValueOnce(reply("not JSON")).mockResolvedValueOnce(reply(JSON.stringify(draft("short"))));
     const r = await write();
     expect(r.value).toEqual(draft("short"));
+    expect((create.mock.calls[1][0] as Params).messages.at(-1)!.content).toContain("reply with the whole JSON object again");
+  });
+
+  it("keeps the section when valid JSON is followed by extra text on a later line, without retrying", async () => {
+    const good = draft("short");
+    create.mockResolvedValueOnce(reply(`${JSON.stringify(good)}\n\n{"note":"counted characters"}`));
+    const r = await write();
+    expect(r.value).toEqual(good);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the writer once when nothing extractable is valid JSON, then succeeds", async () => {
+    create.mockResolvedValueOnce(reply('{"a":}\n\nstill broken')).mockResolvedValueOnce(reply(JSON.stringify(draft("short"))));
+    const r = await write();
+    expect(r.value).toEqual(draft("short"));
+    expect(create).toHaveBeenCalledTimes(2);
     expect((create.mock.calls[1][0] as Params).messages.at(-1)!.content).toContain("reply with the whole JSON object again");
   });
 
