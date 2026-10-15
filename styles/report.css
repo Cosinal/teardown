@@ -222,22 +222,45 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
   .td-sheet:last-child{break-after: auto}
 }
 
-/* Cooking state: a teardown that has no report yet. One sheet, same header. */
-.td-sheet.is-cooking{height:auto;min-height:420px}
-.td-cooking{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:40px 0}
-.td-cooking .td-h1{max-width:20ch}
-.td-steps{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:19px;color:#5C626B}
-.td-steps li{display:flex;align-items:center;gap:10px}
-.td-steps li::before{content:"";width:7px;height:7px;box-sizing:border-box;border:1px solid currentColor}
+/* Waiting / private / error: a fluid card, same type as the report, sized for a phone first. */
+.td-doc:has(.is-cooking){min-height:100svh;padding:16px;justify-content:flex-start;gap:0}
+.td-sheet.is-cooking{width:100%;max-width:36rem;height:auto;min-height:0;padding:22px 20px 28px}
+.td-cooking{flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:16px;padding:24px 0 4px}
+.td-cooking .td-h1{max-width:20ch;font-size:clamp(26px,7vw,34px);line-height:1.12}
+.td-cooking .td-dek{font-size:16px;line-height:24px}
+.td-eta{display:inline-flex;align-self:flex-start;padding:6px 10px;border:1px solid #14161A;font-family:'IBM Plex Mono',Menlo,Consolas,monospace;font-size:11px;line-height:14px;letter-spacing:0.06em;text-transform:uppercase;font-weight:500}
+.td-progress{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.td-progress-meta{display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:14px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:#5C626B}
+.td-progress-meta span:last-child{color:var(--accent);text-align:right}
+.td-track{height:3px;background:#E4E6EA}
+.td-track-fill{height:100%;background:var(--accent);width:0}
+.td-steps{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column}
+.td-steps li{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:12px;align-items:start;padding:12px 0;border-bottom:1px solid #E4E6EA;color:#5C626B}
+.td-steps li:last-child{border-bottom:1px solid #14161A}
+.td-step-mark{width:22px;height:22px;margin-top:1px;box-sizing:border-box;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',Menlo,Consolas,monospace;font-size:10px;line-height:10px;font-weight:500}
 .td-steps li.is-done{color:#14161A}
-.td-steps li.is-done::before{background:currentColor}
-.td-steps li.is-now{color:var(--accent);font-weight:600}
-.td-steps li.is-now::before{animation:td-pulse 1.2s ease-in-out infinite}
-@keyframes td-pulse{50%{background:currentColor}}
-/* Unpaid: back to Stripe Checkout. */
-.td-pay button{padding:0;border:0;background:none;font:inherit;font-size:13px;line-height:19px;color:var(--accent);text-decoration:underline;cursor:pointer}
+.td-steps li.is-done .td-step-mark{background:#14161A;color:#fff;border-color:#14161A}
+.td-steps li.is-now{color:var(--accent)}
+.td-steps li.is-now .td-step-mark{border-color:var(--accent);animation:td-pulse 1.2s ease-in-out infinite}
+.td-step-label{font-size:15px;line-height:20px;font-weight:600;color:inherit}
+.td-steps li.is-done .td-step-label,.td-steps li.is-now .td-step-label{color:#14161A}
+.td-step-detail{margin-top:2px;font-size:13px;line-height:18px;color:#5C626B}
+.td-refresh{margin:4px 0 0;font-size:12px;line-height:17px;color:#5C626B}
+.td-actions{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin-top:4px}
+.td-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border:1px solid #14161A;background:#14161A;color:#fff;font:inherit;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;font-weight:600;text-decoration:none;cursor:pointer}
+.td-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.td-note{margin:0;font-size:13px;line-height:19px;color:#5C626B}
 /* Admin only: a failed run's saved error and the re-run button. */
-.td-admin{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
-.td-admin pre{margin:0;max-width:100%;max-height:240px;overflow:auto;white-space:pre-wrap;font-size:11px;line-height:15px;color:#3F444C}
-@media (prefers-reduced-motion:reduce){.td-steps li.is-now::before{animation:none;background:currentColor}}
-@media (max-width:880px){.td-doc{padding:16px}.td-sheet.is-cooking{width:100%;padding:24px 20px}}
+.td-admin{display:flex;flex-direction:column;align-items:stretch;gap:12px;margin-top:4px}
+.td-admin pre{margin:0;max-width:100%;max-height:200px;overflow:auto;white-space:pre-wrap;box-sizing:border-box;padding:12px 14px;background:#F3F4F6;border-top:2px solid #14161A;font-size:12px;line-height:16px;color:#3F444C}
+.td-admin .td-btn{align-self:stretch}
+@keyframes td-pulse{50%{background:currentColor;color:#fff}}
+@media (prefers-reduced-motion:reduce){.td-steps li.is-now .td-step-mark{animation:none;background:var(--accent);color:#fff}}
+@media (min-width:640px){
+  .td-doc:has(.is-cooking){padding:48px 24px;align-items:center;justify-content:center}
+  .td-sheet.is-cooking{padding:28px 36px 36px}
+  .td-cooking{padding:32px 0 8px;gap:18px}
+}
+@media print{
+  .td-doc:has(.is-cooking){min-height:0;padding:0}
+}

@@ -421,9 +421,9 @@ describe("who can see a teardown", () => {
   it("a stranger can't read the idea from the page title either", async () => {
     withRow({ report: SAMPLE_REPORT });
     const { generateMetadata } = await import("../app/t/[id]/page");
-    expect((await generateMetadata({ params: Promise.resolve({ id: "abc" }) })).title).toBe("Teardown");
+    expect((await generateMetadata({ params: Promise.resolve({ id: "abc" }) })).title).toBe("Tearitdown");
     jar.set(ownerCookie("abc"), owner.token);
-    expect((await generateMetadata({ params: Promise.resolve({ id: "abc" }) })).title).toBe(`${SAMPLE_REPORT.idea.name} — Teardown`);
+    expect((await generateMetadata({ params: Promise.resolve({ id: "abc" }) })).title).toBe(`${SAMPLE_REPORT.idea.name} — Tearitdown`);
   });
 
   it("a teardown from before payments (no owner) is admin-only", async () => {
@@ -443,6 +443,17 @@ describe("who can see a teardown", () => {
 
   it("the sample stays public", async () => {
     expect((await render("sample")).name).toBe("Report");
+  });
+
+  it("the waiting and error design fixtures are public and skip the database", async () => {
+    const waiting = await render("sample-waiting");
+    expect(waiting.name).toBe("Cooking");
+    expect(waiting.props.t).toMatchObject({ status: "section_research", paid: true });
+    const error = await render("sample-error");
+    expect(error.name).toBe("Cooking");
+    expect(error.props.t).toMatchObject({ status: "failed", refunded: true });
+    expect(error.props.admin).toEqual({ error: "Run timed out or lost connection" });
+    expect(queries).toEqual([]);
   });
 });
 

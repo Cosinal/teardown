@@ -2,15 +2,16 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { cache } from "react";
+import { Cooking, Private } from "@/components/Waiting";
 import Report from "@/components/Report";
 import { ADMIN_COOKIE, isAdminCookie } from "@/lib/admin";
 import { init, sql } from "@/lib/db";
 import { parseReport, type TeardownReport } from "@/lib/engine";
 import { SAMPLE_REPORT } from "@/lib/engine/fixtures/sample";
 import { STALE_RUN_ERROR, failStaleRun, isInProgress, type TeardownStatus } from "@/lib/engine/store";
+import { DESIGN_ERROR, DESIGN_WAITING, isDesignId } from "@/lib/waiting";
 import { isOwnerToken, ownerCookie, refundIfPaid } from "@/lib/payments";
 import "@/styles/report.css";
-import { rerunTeardown, resumeCheckout } from "./actions";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -21,10 +22,12 @@ type Loaded =
   | { report: TeardownReport; ownerHash: string | null }
   | { report: null; ownerHash: string | null; status: TeardownStatus; idea: string; error: string | null; paid: boolean; refunded: boolean };
 
-// "sample" is the design's fixture and never touches the database.
-// cache() shares one lookup between generateMetadata and the page.
+// Design fixtures never touch the database. cache() shares one lookup between
+// generateMetadata and the page.
 const load = cache(async (id: string): Promise<Loaded | null> => {
   if (id === "sample") return { report: SAMPLE_REPORT, ownerHash: null };
+  if (id === "sample-waiting") return { report: null, ownerHash: null, ...DESIGN_WAITING };
+  if (id === "sample-error") return { report: null, ownerHash: null, ...DESIGN_ERROR };
   if (!process.env.DATABASE_URL || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null;
   await init();
   const rows = await sql()`SELECT status, idea, report, error, payment_intent, refunded_at, owner_token_hash FROM teardowns WHERE id = ${id}`;
@@ -51,9 +54,9 @@ const load = cache(async (id: string): Promise<Loaded | null> => {
   return { report: null, ownerHash, status, idea: row.idea, error, paid, refunded };
 });
 
-/** The sample is public. Every other teardown is shown only to its owner cookie or the admin cookie. */
+/** Design fixtures are public. Every other teardown is shown only to its owner cookie or the admin cookie. */
 async function canView(id: string, t: Loaded): Promise<boolean> {
-  if (id === "sample") return true;
+  if (isDesignId(id)) return true;
   const jar = await cookies();
   return isAdminCookie(jar.get(ADMIN_COOKIE)?.value) || isOwnerToken(jar.get(ownerCookie(id))?.value, t.ownerHash);
 }
@@ -63,87 +66,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const t = await load(id);
   const visible = !!t?.report && (await canView(id, t));
   return {
-    title: visible ? `${t.report!.idea.name} — Teardown` : "Teardown",
+    title: visible ? `${t.report!.idea.name} — Tearitdown` : "Tearitdown",
     robots: id === "sample" ? undefined : { index: false },
   };
-}
-
-const STEPS: [string, TeardownStatus[]][] = [
-  ["Reading your idea", ["queued", "intake"]],
-  ["Searching the market", ["research", "section_research"]],
-  ["Writing the readout", ["writing", "factcheck", "drafted"]],
-];
-
-/** Shown instead of a teardown to anyone without its owner cookie or the admin cookie. Renders no row data. */
-function Private() {
-  return (
-    <div className="td-doc">
-      <div className="td-sheet is-cooking">
-        <header className="td-head">
-          <div className="td-brand">teardown</div>
-        </header>
-        <main className="td-cooking">
-          <div className="td-pagenum">Private</div>
-          <h1 className="td-h1">This teardown is private.</h1>
-          <p className="td-dek">Only the person who paid for it can see it, in the browser they paid from.</p>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-type Waiting = Extract<Loaded, { report: null }>;
-
-/** `admin` is set only for the admin cookie: the saved error and a re-run button. Never shown to anyone else. */
-function Cooking({ id, t, admin }: { id: string; t: Waiting; admin?: { error: string | null } }) {
-  const { status, idea, paid, refunded } = t;
-  const failed = status === "failed";
-  const unpaid = status === "awaiting_payment";
-  const now = STEPS.findIndex(([, s]) => s.includes(status));
-  const [pagenum, h1, dek] = unpaid
-    ? ["Checkout", "Waiting for payment.", "Your answers are saved. Once your payment goes through, the teardown starts and this page updates on its own."]
-    : failed && refunded
-      ? ["Stopped", "Something went wrong, you’ve been refunded.", "Your payment has been refunded in full. It can take 5–10 business days to reach your account."]
-      : failed && paid
-        ? ["Stopped", "Something went wrong with this teardown.", "Your payment will be refunded in full."]
-        : failed
-          ? ["Stopped", "Something went wrong with this teardown.", "Please submit your idea again from the start."]
-          : ["In the kitchen", "Your teardown is cooking.", "We’re researching the market for your idea. This page refreshes on its own; you can also come back to this link later."];
-  return (
-    <div className="td-doc">
-      {/* Unpaid too: the webhook usually lands a moment after Stripe sends the founder back here. */}
-      {!failed && <meta httpEquiv="refresh" content="15" />}
-      <div className="td-sheet is-cooking">
-        <header className="td-head">
-          <div className="td-brand">teardown</div>
-          <div className="td-subject">{idea}</div>
-        </header>
-        <main className="td-cooking" aria-live="polite">
-          <div className="td-pagenum">{pagenum}</div>
-          <h1 className="td-h1">{h1}</h1>
-          <p className="td-dek">{dek}</p>
-          {unpaid && (
-            <form action={resumeCheckout.bind(null, id)} className="td-pay">
-              <button type="submit">Not paid yet? Go to checkout</button>
-            </form>
-          )}
-          {failed && admin && (
-            <form action={rerunTeardown.bind(null, id)} className="td-admin">
-              <pre className="td-mono">{admin.error ?? "No error saved."}</pre>
-              <button type="submit">Re-run from saved answers</button>
-            </form>
-          )}
-          {!failed && !unpaid && (
-            <ol className="td-steps">
-              {STEPS.map(([label], i) => (
-                <li key={label} className={i < now ? "is-done" : i === now ? "is-now" : undefined}>{label}</li>
-              ))}
-            </ol>
-          )}
-        </main>
-      </div>
-    </div>
-  );
 }
 
 export default async function TeardownPage({ params }: Props) {
@@ -152,7 +77,8 @@ export default async function TeardownPage({ params }: Props) {
   if (!t) notFound();
   if (!(await canView(id, t))) return <Private />;
   if (!t.report) {
-    const admin = t.status === "failed" && isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value);
+    // sample-error is the design's error layout, including the admin re-run chrome.
+    const admin = t.status === "failed" && (id === "sample-error" || isAdminCookie((await cookies()).get(ADMIN_COOKIE)?.value));
     return <Cooking id={id} t={t} admin={admin ? { error: t.error } : undefined} />;
   }
   return <Report report={t.report} label={id === "sample" ? "Sample report" : undefined} />;
