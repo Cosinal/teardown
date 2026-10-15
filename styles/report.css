@@ -226,7 +226,7 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
 .td-doc:has(.is-cooking){min-height:100svh;padding:16px;justify-content:flex-start;gap:0}
 .td-sheet.is-cooking{width:100%;max-width:36rem;height:auto;min-height:0;padding:22px 20px 28px}
 .td-cooking{flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:16px;padding:24px 0 4px}
-.td-cooking .td-h1{max-width:16ch;font-size:clamp(26px,7vw,34px);line-height:1.12}
+.td-cooking .td-h1{max-width:20ch;font-size:clamp(26px,7vw,34px);line-height:1.12}
 .td-cooking .td-dek{font-size:16px;line-height:24px}
 .td-eta{display:inline-flex;align-self:flex-start;padding:6px 10px;border:1px solid #14161A;font-family:'IBM Plex Mono',Menlo,Consolas,monospace;font-size:11px;line-height:14px;letter-spacing:0.06em;text-transform:uppercase;font-weight:500}
 .td-progress{display:flex;flex-direction:column;gap:10px;margin-top:4px}

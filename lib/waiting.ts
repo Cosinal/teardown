@@ -124,8 +124,8 @@ export function waitingCopy(kind: WaitingKind): WaitingCopy {
     case "failed_refunded":
       return {
         eyebrow: "Stopped",
-        title: "This readout didn't finish. You've been refunded.",
-        dek: "Your payment has been refunded in full. It can take 5–10 business days to reach your account.",
+        title: "This readout didn't finish.",
+        dek: "You've been refunded in full. It can take 5–10 business days to reach your account.",
       };
     case "failed_paid":
       return {

@@ -121,6 +121,7 @@ describe("waiting markup", () => {
     const markup = html(createElement(Cooking, { id: "abc", t: DESIGN_ERROR, admin: { error: DESIGN_ERROR.error } }));
     expect(markup).toContain("Re-run from saved answers");
     expect(markup).toContain(STALE_RUN_ERROR);
+    expect(markup).toContain("This readout didn");
     expect(markup).toContain("been refunded");
     expect(markup).not.toContain("About 2–5 minutes");
     expect(markup).not.toContain("Reading your idea");
