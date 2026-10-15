@@ -3,30 +3,35 @@ import Join from "@/components/Join";
 import Track from "@/components/Track";
 import "@/styles/home.css";
 
+const title = "Tearitdown — Market readouts for new business ideas";
+const description =
+  "Submit a startup idea. Receive a nine-section report, with sourced, fact-checked claims, so you can decide whether to build.";
+
 export const metadata: Metadata = {
-  title: "Teardown — Market readouts for new business ideas",
-  description: "A one-page verdict on any business idea, with the full teardown behind it: competitors, pricing, customers, and open ground.",
+  title,
+  description,
+  openGraph: { title, description },
 };
 
 export default function Home() {
   return (
     <>
       <Track path="/" />
-      <header><div className="wrap"><span>Teardown</span><span>Market Readouts</span></div></header>
+      <header><div className="wrap"><span>Tearitdown</span><span>Market Readouts</span></div></header>
       <main><div className="wrap">
         <p className="eyebrow">Opening soon</p>
         <h1>Know the market before you enter it.</h1>
-        <p className="pitch">Submit a business idea. Receive a one-page verdict, with the full teardown behind it.</p>
+        <p className="pitch">Submit a startup idea. Receive a nine-section report, with sourced claims that are fact-checked.</p>
         <div className="grid">
-          <div><b>Competitors</b><p>Who already serves this need, direct and adjacent.</p></div>
-          <div><b>Pricing</b><p>What they charge and how the offer is structured.</p></div>
-          <div><b>Customers</b><p>Who buys from them, and why.</p></div>
-          <div><b>Openings</b><p>Where demand is underserved and a new entrant can win.</p></div>
+          <div><b>Verdict</b><p>Whether to pursue, test first, or drop.</p></div>
+          <div><b>Alternatives</b><p>Who already serves this need, and how they fall short.</p></div>
+          <div><b>Demand</b><p>Whether people are looking for this, and the evidence.</p></div>
+          <div><b>Economics</b><p>What it costs to deliver, and whether the numbers work.</p></div>
         </div>
-        <p className="desc">Each teardown is structured for a decision, so you can tell in minutes whether an idea deserves further work. Pricing will be a single payment of $5–10 per teardown. No subscription.</p>
+        <p className="desc">Each report also names the riskiest assumption and the next tests to run, so you can decide whether to build.</p>
         <Join />
       </div></main>
-      <footer><div className="wrap"><span>© 2026 Teardown</span><a href="/privacy">Privacy Policy</a><a href="/data">Data Policy</a></div></footer>
+      <footer><div className="wrap"><span>© 2026 Tearitdown</span><a href="/privacy">Privacy Policy</a><a href="/data">Data Policy</a></div></footer>
     </>
   );
 }

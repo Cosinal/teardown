@@ -55,7 +55,6 @@ export default function Join() {
       <div>
         <form id="f" onSubmit={onSubmit}><input type="email" name="email" placeholder="Work or personal email" required aria-label="Email" /><button>Join waitlist</button></form>
         <label className="consent"><input type="checkbox" name="consent" id="consent" form="f" required ref={consent} /> <span>I agree to the <a href="/privacy">Privacy Policy</a> and to receive launch emails.</span></label>
-        <p className="offer"><em>First 10 signups</em> receive a complimentary teardown at launch, in exchange for feedback.</p>
         <p id="msg">{msg}</p>
       </div>
     </section>
