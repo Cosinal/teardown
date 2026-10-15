@@ -29,6 +29,16 @@ import type { TeardownReport } from "./types";
  */
 export type TeardownStatus = "awaiting_payment" | "queued" | "intake" | "research" | "section_research" | "writing" | "factcheck" | "drafted" | "failed" | "done";
 
+/** Saved intake and research from an earlier attempt, so a re-run doesn't pay for searches again. */
+export interface ResumeCache {
+  spec: IdeaSpec;
+  /** Shared research. When set, intake and the first search pass are skipped. */
+  research?: { sources: SourceStore; notes: string };
+  /** Fully merged sources after section searches. When set, those searches are skipped too. */
+  sectionSources?: SourceStore;
+  sectionNotes?: Partial<Record<"alternatives" | "demand_evidence" | "economics", string>>;
+}
+
 export interface StageOptions {
   intake?: { model?: string };
   research?: ResearchOptions;
@@ -36,6 +46,8 @@ export interface StageOptions {
   demand_evidence?: SectionOptions;
   economics?: SectionOptions;
   factcheck?: CheckOptions;
+  /** Re-run from saved answers: reuse spec and sources, skip billable searches. */
+  resume?: ResumeCache;
 }
 
 /** One section as written and checked. */
@@ -163,37 +175,64 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
     await hooks.status?.(s);
   };
 
+  const resume = options.resume;
   await status("intake");
-  const intake = await runIntake(input, options.intake);
-  await hooks.intake?.(intake.spec);
-  await record(intake.run);
-  const spec = intake.spec;
+  let spec: IdeaSpec;
+  if (resume?.spec) {
+    spec = resume.spec;
+    await hooks.intake?.(spec);
+  } else {
+    const intake = await runIntake(input, options.intake);
+    await hooks.intake?.(intake.spec);
+    await record(intake.run);
+    spec = intake.spec;
+  }
 
   await status("research");
-  const research = await runResearch(spec, options.research);
-  await hooks.research?.(research.sources, research.notes);
-  await record(research.run);
+  let sources: SourceStore;
+  let notes: string;
+  let researchResponses: SearchResponse[] = [];
+  if (resume?.research) {
+    sources = resume.research.sources;
+    notes = resume.research.notes;
+    await hooks.research?.(sources, notes);
+  } else {
+    const research = await runResearch(spec, options.research);
+    await hooks.research?.(research.sources, research.notes);
+    await record(research.run);
+    sources = research.sources;
+    notes = research.notes;
+    researchResponses = research.responses;
+  }
 
   // Only the searching sections make research calls; config.ts gives the rest 0 searches.
   await status("section_research");
-  const searched = await Promise.all(SEARCHING.map((name) => searchSection(name, {
-    spec, store: research.sources, notes: research.notes,
-    searches: options[name]?.maxSearches ?? SECTIONS[name].searches,
-    model: options[name]?.model ?? STAGE_MODELS[name],
-    prompt: RESEARCH_PROMPTS[name],
-  })));
-  let sources = research.sources;
   const own = {} as Record<Searching, ReturnType<typeof mergeResearch>>;
-  for (const [i, name] of SEARCHING.entries()) {
-    own[name] = mergeResearch(sources, searched[i]);
-    sources = own[name].sources;
-    await hooks.sources?.(own[name].changed);
-    await record(own[name].run);
+  if (resume?.sectionSources) {
+    sources = resume.sectionSources;
+    for (const name of SEARCHING) {
+      own[name] = { sources, changed: [], notes: resume.sectionNotes?.[name] ?? "", run: null, responses: [] };
+    }
+  } else {
+    const searched = await Promise.all(SEARCHING.map((name) => searchSection(name, {
+      spec, store: sources, notes,
+      searches: options[name]?.maxSearches ?? SECTIONS[name].searches,
+      model: options[name]?.model ?? STAGE_MODELS[name],
+      prompt: RESEARCH_PROMPTS[name],
+    })));
+    for (const [i, name] of SEARCHING.entries()) {
+      own[name] = mergeResearch(sources, searched[i]);
+      sources = own[name].sources;
+      await hooks.sources?.(own[name].changed);
+      await record(own[name].run);
+      // Saved before writing so a failed writer still leaves notes for a re-run.
+      await hooks.section?.(name, { notes: own[name].notes });
+    }
   }
 
   await status("writing");
   const context = writerContext(spec, sources, [
-    { label: "Shared research", text: research.notes },
+    { label: "Shared research", text: notes },
     ...SEARCHING.map((name) => ({ label: `${LABELS[name]} research`, text: own[name].notes })),
   ]);
   const [altWrite, demandWrite, econWrite] = await writeFirstSections(context, sources, input, options, record);
@@ -296,7 +335,7 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
   return {
     spec,
     sources,
-    notes: research.notes,
+    notes,
     alternatives,
     demand_evidence: demand,
     economics,
@@ -310,6 +349,6 @@ export async function runPipeline(input: IntakeInput, options: StageOptions = {}
     writerContext: context,
     report,
     runs,
-    responses: research.responses,
+    responses: researchResponses,
   };
 }

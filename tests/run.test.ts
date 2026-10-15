@@ -131,6 +131,38 @@ describe("runStages claim", () => {
     await expect(runStages("abc")).rejects.toThrow("search timed out");
     expect(queries.some((q) => q.text.includes("stage_runs = stage_runs ||"))).toBe(false);
   });
+
+  it("a re-run passes saved research so the pipeline can skip searches", async () => {
+    const spec = { name: "Halifax van", search_queries: [] };
+    const source = { source_id: "S1", url: "https://s1.example", title: "S1", retrieved_at: "2026-10-12T00:00:00.000Z", excerpt: "Quote" };
+    respond = (t) => {
+      if (claimSql(t)) return [{ id: "abc", input: INPUT }];
+      if (t.startsWith("SELECT idea_spec, research_notes, sections, stage_runs")) {
+        return [{
+          idea_spec: spec, research_notes: "Shared notes [S1].",
+          sections: { demand_evidence: { notes: "Demand notes [S2]." } },
+          stage_runs: [
+            { stage: "research" },
+            { stage: "alternatives", step: "research" },
+            { stage: "demand_evidence", step: "research" },
+            { stage: "economics", step: "research" },
+          ],
+        }];
+      }
+      if (t.startsWith("SELECT source_id, url, title, retrieved_at, excerpt FROM sources")) return [source];
+      return [];
+    };
+    runPipeline.mockResolvedValue({ ok: true });
+    await runStages("abc");
+    const resume = runPipeline.mock.calls[0][1].resume;
+    expect(resume.spec).toEqual(spec);
+    expect(resume.research).toEqual({
+      sources: [{ id: "S1", url: "https://s1.example", title: "S1", retrieved_at: "2026-10-12T00:00:00.000Z", excerpt: "Quote" }],
+      notes: "Shared notes [S1].",
+    });
+    expect(resume.sectionSources).toHaveLength(1);
+    expect(resume.sectionNotes.demand_evidence).toBe("Demand notes [S2].");
+  });
 });
 
 describe("startRun", () => {

@@ -196,11 +196,67 @@ export async function warmWriterCache(model: string, context: string): Promise<S
   };
 }
 
-/** The JSON object in a writer's reply, tolerating a code fence or a sentence around it. */
+/**
+ * Every complete JSON value in a writer's reply, in order. Writers sometimes
+ * emit a valid object and then more text — a second object, a fence, or a
+ * comment that still contains `}`. JSON.parse of first `{` to last `}` then
+ * throws V8's "Unexpected non-whitespace character after JSON at position N
+ * (line 3 column 1)", which is the live demand_evidence error. That shape
+ * repeated on the same idea, so a retry produces the same reply; callers
+ * pick a value that passes the section parser instead.
+ */
+export function jsonValues(text: string): unknown[] {
+  const values: unknown[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const brace = text.indexOf("{", i);
+    const bracket = text.indexOf("[", i);
+    const start = [brace, bracket].filter((n) => n >= 0).sort((a, b) => a - b)[0];
+    if (start === undefined) break;
+    const slice = text.slice(start);
+    try {
+      values.push(JSON.parse(slice));
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const after = msg.match(/after JSON at position (\d+)/);
+      if (after) {
+        try {
+          values.push(JSON.parse(slice.slice(0, Number(after[1]))));
+          i = start + Number(after[1]);
+          continue;
+        } catch {
+          // The prefix V8 pointed at still isn't a value; skip this opener.
+        }
+      }
+      i = start + 1;
+    }
+  }
+  return values;
+}
+
+/** Top-level objects in the reply. A wrapping array contributes its object elements. */
+export function jsonObjects(text: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  const take = (v: unknown) => {
+    if (Array.isArray(v)) {
+      for (const x of v) take(x);
+    } else if (v !== null && typeof v === "object") {
+      objects.push(v as Record<string, unknown>);
+    }
+  };
+  for (const v of jsonValues(text)) take(v);
+  return objects;
+}
+
+/** The JSON object in a writer's reply, tolerating a code fence, a sentence around it, or extra text after the first value. */
 export function parseJsonText(text: string): unknown {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("no JSON object in the reply");
+  const values = jsonValues(text);
+  if (values.length) return values[0];
+  const start = text.search(/[{[]/);
+  if (start < 0) throw new Error("no JSON object in the reply");
+  const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  if (end < start) throw new Error("no JSON object in the reply");
   try {
     return JSON.parse(text.slice(start, end + 1));
   } catch (err) {
@@ -256,13 +312,16 @@ export interface Revision {
 }
 
 /**
- * Calls a section writer and validates its JSON with `parse`. On a validation
- * error it retries (up to WRITE_ATTEMPTS calls in all), telling the writer what
- * failed. When the problem is one text field in its reply (most are a field
- * over its character limit), the retry asks for that field alone and puts it
- * into the last reply, so the writer doesn't write the whole section again.
- * Anything else (invalid JSON, a rule across fields, a field the reply
- * doesn't have) asks for the whole object again.
+ * Calls a section writer and validates its JSON with `parse`. Extra text after
+ * a complete object is stripped (see jsonValues); when several objects are in
+ * the reply, the last one that passes `parse` wins — a short stub then the
+ * real section is the demand_evidence shape, and taking the stub would still
+ * fail the run. On a validation error it retries (up to WRITE_ATTEMPTS calls
+ * in all), telling the writer what failed. When the problem is one text field
+ * in its reply (most are a field over its character limit), the retry asks for
+ * that field alone and puts it into the last reply, so the writer doesn't write
+ * the whole section again. Anything else (invalid JSON, a rule across fields, a
+ * field the reply doesn't have) asks for the whole object again.
  */
 export async function runWriter<T>(
   stage: Stage,
@@ -287,26 +346,41 @@ export async function runWriter<T>(
     modelId = msg.model;
     assertFinished(msg, stage);
     const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-    let json: unknown;
     try {
-      json = parseJsonText(text);
-      if (patching) {
-        // Asked for as {"<path>": "..."}; a reply nested as the section's own shape is accepted too.
-        const fixed = (json as Record<string, unknown>)[patching] ?? stringAt(json, patching);
-        if (typeof fixed !== "string") throw new Error(`the reply has no string for ${patching}`);
-        json = withString(last, patching, fixed);
+      const candidates = jsonObjects(text);
+      if (!candidates.length) {
+        parseJsonText(text);
+        throw new Error("no JSON object in the reply");
       }
-      last = json;
-      // Parsers may change what they are given; `last` must stay the reply as sent.
-      const value = parse(structuredClone(json));
-      return {
-        value,
-        run: {
-          stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
-          cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
-          ...(retries.length && { retries }),
-        },
-      };
+      let problem: Error = new Error("no JSON object in the reply");
+      // Last object first: the model's final JSON, not a stub it wrote before it.
+      for (const [i, raw] of [...candidates].reverse().entries()) {
+        try {
+          let json: unknown = raw;
+          if (patching) {
+            // Asked for as {"<path>": "..."}; a reply nested as the section's own shape is accepted too.
+            const fixed = (json as Record<string, unknown>)[patching] ?? stringAt(json, patching);
+            if (typeof fixed !== "string") throw new Error(`the reply has no string for ${patching}`);
+            json = withString(last, patching, fixed);
+          } else if (i === 0) {
+            last = json;
+          }
+          // Parsers may change what they are given; `last` must stay the reply as sent.
+          const value = parse(structuredClone(json));
+          last = json;
+          return {
+            value,
+            run: {
+              stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
+              cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+              ...(retries.length && { retries }),
+            },
+          };
+        } catch (err) {
+          problem = err instanceof Error ? err : new Error(String(err));
+        }
+      }
+      throw problem;
     } catch (err) {
       const problem = err instanceof Error ? err.message : String(err);
       if (attempt >= WRITE_ATTEMPTS) {

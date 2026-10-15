@@ -3,9 +3,9 @@ import { init, sql } from "@/lib/db";
 import { FACTCHECK_GAP_PROMPT, FACTCHECK_PROMPT } from "./factcheck";
 import type { PageCache } from "./fetch";
 import type { IntakeInput } from "./input";
-import { INTAKE_PROMPT } from "./intake";
+import { INTAKE_PROMPT, type IdeaSpec } from "./intake";
 import { Budget, DeadlineError, withBudget, type StageRun } from "./llm";
-import { runPipeline, type StageOptions, type StagesResult, type TeardownStatus } from "./pipeline";
+import { runPipeline, type ResumeCache, type StageOptions, type StagesResult, type TeardownStatus } from "./pipeline";
 import { RESEARCH_PROMPT, type SourceStore } from "./research";
 import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT } from "./sections/alternatives";
 import { ASSUMPTIONS_WRITE_PROMPT } from "./sections/assumptions";
@@ -18,7 +18,33 @@ import { IDEA_WRITE_PROMPT } from "./sections/idea";
 import { TESTS_WRITE_PROMPT } from "./sections/tests";
 import { VERDICT_WRITE_PROMPT } from "./sections/verdict";
 
-export type { StageOptions, StagesResult, TeardownStatus } from "./pipeline";
+export type { ResumeCache, StageOptions, StagesResult, TeardownStatus } from "./pipeline";
+
+const SEARCHING = ["alternatives", "demand_evidence", "economics"] as const;
+
+/**
+ * Spec, notes and sources from an earlier attempt. Used so "Re-run from saved
+ * answers" skips intake and web searches that already ran (and were paid for).
+ */
+export async function loadResume(id: string): Promise<ResumeCache | undefined> {
+  const rows = await sql()`SELECT idea_spec, research_notes, sections, stage_runs FROM teardowns WHERE id = ${id}`;
+  const row = rows[0];
+  if (!row?.idea_spec) return undefined;
+  const runs = (Array.isArray(row.stage_runs) ? row.stage_runs : []) as StageRun[];
+  const has = (stage: string, step?: string) =>
+    runs.some((r) => r.stage === stage && (step === undefined || r.step === step));
+  const spec = row.idea_spec as IdeaSpec;
+  if (!has("research")) return { spec };
+  const sources = await getSources(id);
+  if (!sources.length) return { spec };
+  const resume: ResumeCache = { spec, research: { sources, notes: typeof row.research_notes === "string" ? row.research_notes : "" } };
+  if (SEARCHING.every((name) => has(name, "research"))) {
+    const sections = (row.sections ?? {}) as Record<string, { notes?: string } | undefined>;
+    resume.sectionSources = sources;
+    resume.sectionNotes = Object.fromEntries(SEARCHING.map((name) => [name, sections[name]?.notes ?? ""])) as ResumeCache["sectionNotes"];
+  }
+  return resume;
+}
 
 // Teardown rows and their sources in Neon. The engine's stages are pure; this
 // module records what they produce.
@@ -173,7 +199,11 @@ async function claimAndRun(id: string, options: StageOptions, budget: Budget): P
   const input = await claim(id);
 
   try {
-    const opts = { ...options, factcheck: { ...options.factcheck, pages: options.factcheck?.pages ?? dbPageCache(id) } };
+    const opts = {
+      ...options,
+      resume: options.resume ?? await loadResume(id),
+      factcheck: { ...options.factcheck, pages: options.factcheck?.pages ?? dbPageCache(id) },
+    };
     return await runPipeline(input, opts, {
       status: (status) => setStatus(id, status),
       run: (run) => recordRun(id, run),
