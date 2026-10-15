@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
+import { overLen } from "../validate";
 import { SPEC_SOURCE, checkFigures, internalSource, specText } from "./brief";
 import { runWriter, type Revision, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
@@ -29,7 +30,7 @@ export function parseIdea(raw: unknown, ctx: LaterContext): IdeaSection {
   const fields = IdeaSchema.parse(raw);
   for (const k of FIELDS) {
     if (!fields[k].trim()) throw new Error(`${k}: empty`);
-    if (fields[k].length > MAX[k]) throw new Error(`${k}: ${fields[k].length} characters, at most ${MAX[k]}`);
+    if (fields[k].length > MAX[k]) throw new Error(overLen(k, fields[k].length, MAX[k]));
     checkFigures(fields[k], ctx.known, k);
   }
   const section = { name: ctx.spec.name.slice(0, 70), ...fields };

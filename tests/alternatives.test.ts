@@ -119,7 +119,7 @@ describe("parseAlternatives", () => {
 
   it("applies the report's length limits, naming the field", () => {
     const long = { ...section, alternatives: [{ ...section.alternatives[0], name: "A name that is far too long for the page" }] };
-    expect(() => parseAlternatives(long, store)).toThrow(/alternatives\[0\]\.name: longer than 26/);
+    expect(() => parseAlternatives(long, store)).toThrow(/alternatives\[0\]\.name: \d+ characters, at most 26/);
   });
 
   it("caps distinct sources at the budget and allows one workaround", () => {
@@ -226,7 +226,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(first.system[1].text).toContain(`at most ${SOURCE_BUDGETS.alternatives} distinct`);
     expect(first).not.toHaveProperty("output_config.format");
     const retry = create.mock.calls[1][0].messages;
-    expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: longer than 56/);
+    expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: 80 characters, at most 56/);
     expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v3" });
     expect(r.run.usage.input_tokens).toBe(2000);
   });

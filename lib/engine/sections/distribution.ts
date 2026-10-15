@@ -4,7 +4,7 @@ import { STAGE_MODELS, loadPrompt } from "../llm";
 import { sourcesUsed } from "../report";
 import type { SourceStore } from "../research";
 import type { Rating } from "../types";
-import { LIMITS } from "../validate";
+import { LEN, LIMITS, overLen } from "../validate";
 import { PartSchema, type Part } from "./alternatives";
 import { runWriter, type SectionOptions } from "./common";
 import { ARITHMETIC_METHOD, UNCONFIRMED_METHOD, computeEconomics, money, type EconomicsSection } from "./economics";
@@ -120,7 +120,7 @@ export function parseDistribution(raw: unknown, ctx: LaterContext, store: Source
   const cite = (p: { source: string | null; estimate: string | null }, path: string) => {
     if (p.source && p.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
     if (p.source && !ids.has(p.source)) throw new Error(`${path}: ${p.source} is not in the source list`);
-    if (p.estimate && p.estimate.trim().length > ESTIMATE_MAX) throw new Error(`${path}.estimate: longer than ${ESTIMATE_MAX} characters`);
+    if (p.estimate && p.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, p.estimate.trim().length, ESTIMATE_MAX));
   };
   section.channels.forEach((c, i) => {
     const path = `channels[${i}]`;
@@ -139,7 +139,7 @@ export function parseDistribution(raw: unknown, ctx: LaterContext, store: Source
     if (own > room) throw new Error(`${path}.reason: ${own} characters; with the cost text code adds, the reason parts may have at most ${room}`);
   });
   const sc = section.scorecard;
-  if (sc.finding.length > 56) throw new Error(`scorecard.finding: ${sc.finding.length} characters, at most 56`);
+  if (sc.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", sc.finding.length, LEN.finding));
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
 
   const { alternatives, demand_evidence, economics } = ctx.drafts;

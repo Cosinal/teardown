@@ -18,6 +18,8 @@ Reply with this JSON shape:
 
 `Part` is a cited text part as described above.
 
+Character limits are hard: count characters and stay under each one. Aim about ten percent under. `finding` is at most 56 characters.
+
 ## Fields
 
 - `per`: what one sale is, at most 20 characters, e.g. "groom", "report", "session", "customer a month". Use the unit the founder charges per. For a subscription, one sale is one customer for one billing period.

@@ -23,7 +23,7 @@ Reply with this JSON shape:
 
 `Part` is a cited text part as described above.
 
-Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+Character limits are hard: count characters and stay under each one. Aim about ten percent under. `finding` is at most 56 characters.
 
 ## channels
 

@@ -3,7 +3,7 @@ import type { SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { buildPartialReport } from "../report";
 import type { NextTest } from "../types";
-import { LIMITS } from "../validate";
+import { LIMITS, overLen } from "../validate";
 import { checkFigures, knownFigures, pointsElsewhere } from "./brief";
 import { runWriter, type SectionOptions } from "./common";
 import { money } from "./economics";
@@ -76,7 +76,7 @@ export function parseTests(raw: unknown, ctx: LaterContext): TestsSection {
     if (!Number.isFinite(t.cost) || t.cost < 0 || t.cost > MAX_TEST_COST) throw new Error(`${path}.cost: a number from 0 to ${MAX_TEST_COST}`);
     const lengths = [["name", t.name, 24], ["description", t.description, 64], ["proves", t.proves, 40], ["kill_threshold", t.kill_threshold, 70],
       ["summary", t.summary ?? "", 240], ["kill_threshold_short", t.kill_threshold_short ?? "", 32]] as const;
-    for (const [k, v, max] of lengths) if (v.length > max) throw new Error(`${path}.${k}: ${v.length} characters, at most ${max}`);
+    for (const [k, v, max] of lengths) if (v.length > max) throw new Error(overLen(`${path}.${k}`, v.length, max));
     const known = { values: new Set([...ctx.known.values, ...knownFigures(`$${t.cost}`).values]), shown: [...ctx.known.shown, money(t.cost)] };
     for (const [k, v] of [["name", t.name], ["description", t.description], ["summary", t.summary ?? ""], ["proves", t.proves]] as const) {
       checkFigures(moneyIn(v), known, `${path}.${k}`);

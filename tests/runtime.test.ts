@@ -235,10 +235,16 @@ describe("writer retries", () => {
     expect((create.mock.calls[1][0] as Params).messages.at(-1)!.content).toContain("reply with the whole JSON object again");
   });
 
-  it("stop after two retries", async () => {
-    create.mockResolvedValue(reply(JSON.stringify(draft("much too long"))));
-    const err = await write().catch((e: unknown) => e);
+  it("stop after two retries on a structural error", async () => {
+    const parse = () => {
+      throw new Error("scorecard: expected an object");
+    };
+    create.mockResolvedValue(reply(JSON.stringify(draft("short"))));
+    const err = await runWriter("next_tests", {
+      model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "tests-write.v1", parse,
+    }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(WriterError);
+    expect((err as WriterError).message).toMatch(/scorecard: expected an object/);
     expect(WRITE_ATTEMPTS).toBe(3);
     expect(create).toHaveBeenCalledTimes(3);
   });

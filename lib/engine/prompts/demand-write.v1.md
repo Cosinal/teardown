@@ -16,6 +16,8 @@ Reply with this JSON shape:
 
 `Part` is a cited text part as described above.
 
+Character limits are hard: count characters and stay under each one. Aim about ten percent under. `finding` is at most 56 characters.
+
 ## signals
 
 0 to 4 signals, strongest first. Only these kinds, and only when a source in the list states the figure:

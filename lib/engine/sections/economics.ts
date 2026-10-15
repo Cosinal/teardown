@@ -5,6 +5,7 @@ import { BILLING_LABEL, type IntakeInput } from "../input";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { SOURCE_BUDGETS, buildPartialReport } from "../report";
 import type { SourceStore } from "../research";
+import { LEN, overLen } from "../validate";
 import { PartSchema, type Part } from "./alternatives";
 import { runSectionResearch, runWriter, type SectionOptions } from "./common";
 import { SECTIONS } from "./config";
@@ -161,7 +162,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
     if (!Number.isFinite(input.amount) || input.amount < 0) throw new Error(`${name}.amount: must be a number, 0 or more`);
     if (!input.note.length || input.note.length > 4) throw new Error(`${name}.note: 1 to 4 parts`);
     const chars = input.note.reduce((n, p) => n + p.text.length, 0);
-    if (chars > NOTE_MAX[name]) throw new Error(`${name}.note: longer than ${NOTE_MAX[name]} characters in total`);
+    if (chars > NOTE_MAX[name]) throw new Error(overLen(`${name}.note`, chars, NOTE_MAX[name]));
     if (!input.note.some((p) => p.source || p.estimate)) throw new Error(`${name}.note: needs at least one part that cites a source or gives an estimate`);
     input.note.forEach((p, j) => {
       const path = `${name}.note[${j}]`;
@@ -172,7 +173,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
         cited.add(p.source);
       }
       if (p.estimate) {
-        if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(`${path}.estimate: longer than ${ESTIMATE_MAX} characters`);
+        if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, p.estimate.trim().length, ESTIMATE_MAX));
         cited.add(`estimate:${p.estimate.trim()}`);
       }
     });
@@ -183,9 +184,11 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
   }
   if (section.price.amount >= 1e9 || section.fixed_costs.amount >= 1e9) throw new Error("amounts: under 1 billion");
   if (!/^[A-Z]{3}$/.test(section.currency)) throw new Error("currency: a three-letter ISO code, e.g. USD");
-  if (!section.per.trim() || section.per.length > 20) throw new Error("per: 1 to 20 characters");
-  if (!section.break_even_unit.trim() || section.break_even_unit.length > 20) throw new Error("break_even_unit: 1 to 20 characters");
-  if (section.scorecard.finding.length > 56) throw new Error(`scorecard.finding: ${section.scorecard.finding.length} characters, at most 56`);
+  if (!section.per.trim()) throw new Error("per: empty");
+  if (section.per.length > 20) throw new Error(overLen("per", section.per.length, 20));
+  if (!section.break_even_unit.trim()) throw new Error("break_even_unit: empty");
+  if (section.break_even_unit.length > 20) throw new Error(overLen("break_even_unit", section.break_even_unit.length, 20));
+  if (section.scorecard.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", section.scorecard.finding.length, LEN.finding));
   if (/\d/.test(section.scorecard.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
   if (cited.size > maxSources) throw new Error(`cites ${cited.size} distinct sources and estimate methods, counting the arithmetic; the limit is ${maxSources}`);
   return section;

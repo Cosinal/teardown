@@ -10,7 +10,7 @@ Reply with this JSON shape:
 
 Every field above is a plain string or number, not a cited part object.
 
-Character limits are hard: aim about ten percent under each one, since a field even one character over fails.
+Character limits are hard: count characters and stay under each one. Aim about ten percent under.
 
 - `headline`: the idea in one line, at most 64 characters, e.g. "Mobile dog grooming at the owner's door in Halifax". It is page 1's title.
 - `customer`: who buys, at most 90 characters.

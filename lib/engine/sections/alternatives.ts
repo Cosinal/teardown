@@ -4,6 +4,7 @@ import { STAGE_MODELS, loadPrompt } from "../llm";
 import { SOURCE_BUDGETS, buildPartialReport, isNotPublic } from "../report";
 import type { SourceStore } from "../research";
 import { PRICE_NOT_PUBLIC } from "../types";
+import { overLen } from "../validate";
 import { runSectionResearch, runWriter } from "./common";
 import { SECTIONS } from "./config";
 
@@ -60,7 +61,7 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
       cited.add(p.source);
     }
     if (p.estimate) {
-      if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(`${path}.estimate: longer than ${ESTIMATE_MAX} characters`);
+      if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, p.estimate.trim().length, ESTIMATE_MAX));
       cited.add(`estimate:${p.estimate.trim()}`);
     }
   };
