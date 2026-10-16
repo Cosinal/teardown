@@ -73,7 +73,7 @@ export function claimFigures(text: string): ClaimFigure[] {
   for (const m of s.matchAll(/\$(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb](?![a-z]))?/gi)) add(scale(m[1]!, m[2]), "num");
   for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb](?![a-z]))\b/gi)) add(scale(m[1]!, m[2]), "num");
   for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*%/g)) add(scale(m[1]!), "pct");
-  for (const m of s.matchAll(/(?<![$\d.a-z])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![\d.%¢]|[kmb]\b|\s*(?:cents?|percent|thousand|million|billion)\b)/gi)) add(scale(m[1]!), "num");
+  for (const m of s.matchAll(/(?<![$\d.,a-z])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![\d.%¢]|[kmb]\b|\s*(?:cents?|percent|thousand|million|billion)\b)/gi)) add(scale(m[1]!), "num");
   return out;
 }
 
@@ -160,7 +160,8 @@ export function claimRelevant(
   if (product) {
     const pToks = tokens(product);
     if (!pToks.length) return "unsure";
-    if (!sharesTerm(pToks, tokens(evidence))) return "skip";
+    const name = context.match(/^(?:Alternatives row|Distribution channel) "([^"]+)"/)?.[1] ?? "";
+    if (!sharesTerm(pToks, tokens(evidence)) && !sharesTerm(tokens(name), tokens(evidence))) return "skip";
   }
 
   if (cFigs.length && eFigs.length === 0) return "skip";

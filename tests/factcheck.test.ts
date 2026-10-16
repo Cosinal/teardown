@@ -344,6 +344,18 @@ describe("runFactcheck (Anthropic mocked)", () => {
 describe("claimRelevant", () => {
   const s = (title: string, url: string, excerpt: string) => ({ title, url, excerpt });
 
+  it("does not skip on a listing-site example when the row name is on the page (probe b: Sirius)", () => {
+    const wix = s("Home", "https://slstout2.wixsite.com/siriusmobilegrooming", "For grooming or bath services please message me through Facebook or text message for a quote.");
+    expect(claimRelevant("Groom price is quote only", wix, `Alternatives row "Dog Star Sirius Grooming" (Yelp, Facebook, Yellow Pages): its weakness`)).not.toBe("skip");
+    // still a skip when neither the name nor any example appears
+    expect(claimRelevant("Groom price is quote only", s("Home", "https://example.com/vet", "Vet visits cost $90."), `Alternatives row "Dog Star Sirius Grooming" (Yelp, Facebook): its weakness`)).toBe("skip");
+  });
+
+  it("a comma-grouped figure has no phantom zero", () => {
+    expect(claimFigures("Estimates far above $24,000 a year")).toEqual([{ n: 24_000, kind: "num" }]);
+    expect(claimRelevant("Estimates far above $24,000 a year", s("Page", "https://example.com/p", "0 stars. Costs $75,000."), "")).toBe("unsure");
+  });
+
   it("reads figures and treats indiehackers as sharing a term with indie-hacker", () => {
     expect(claimFigures("100K Members, 2.9% + 30¢")).toEqual([
       { n: 0.3, kind: "num" }, { n: 100_000, kind: "num" }, { n: 2.9, kind: "pct" },
