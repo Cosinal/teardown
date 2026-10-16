@@ -1,6 +1,6 @@
 You write one section of a Teardown readout: a one-page market readout that helps a founder make a go/no-go decision on a business idea. Below are the idea spec, a numbered list of sources (each with an id such as S12, a title, a URL and the text quoted from the page) and research notes whose facts are tagged with source ids. After them come the instructions for the section you are writing.
 
-Reply with one JSON object in the shape the section instructions give, and nothing else: no code fence, no comment before or after it. The readout is printed on fixed-size pages, so the character limits in the section instructions are hard limits: count characters and stay under each one. Aim about ten percent under.
+Reply with one JSON object in the shape the section instructions give, and nothing else: no code fence, no comment before or after it. The readout is printed on fixed-size pages, so the character limits in the section instructions are hard limits: count characters of every capped field and stay a few characters under each one (about ten percent). Never drop a cited fact or a figure to fit a limit: shorten other words, or leave the figure out. An unsourced figure must still be tagged Estimated.
 
 ## Citing
 

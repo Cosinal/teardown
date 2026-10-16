@@ -6,8 +6,8 @@ import type { AlternativesSection } from "../lib/engine/sections/alternatives";
 import type { AssumptionsSection } from "../lib/engine/sections/assumptions";
 import { parseBlockers, writeBlockers, type BlockersSection } from "../lib/engine/sections/blockers";
 import {
-  LENGTH_REPAIR_ATTEMPTS, WRITE_ATTEMPTS, WriterError, applyLengthOverrun, lengthOverrun,
-  runWriter, truncateAtWord,
+  LENGTH_REPAIR_ATTEMPTS, TINY_OVERRUN_RATIO, WRITE_ATTEMPTS, WriterError, applyLengthOverrun,
+  figuresLost, isTinyOverrun, lengthOverrun, runWriter, stringAt, trimIsSafe, truncateAtWord,
 } from "../lib/engine/sections/common";
 import type { DemandSection } from "../lib/engine/sections/demand";
 import type { DistributionSection } from "../lib/engine/sections/distribution";
@@ -17,7 +17,7 @@ import { laterContext } from "../lib/engine/sections/later";
 import { parseTests, writeTests, type TestsSection } from "../lib/engine/sections/tests";
 import { parseVerdict, writeVerdict, type VerdictSection } from "../lib/engine/sections/verdict";
 import type { Drafts } from "../lib/engine/report";
-import { LEN } from "../lib/engine/validate";
+import { LEN, overLen } from "../lib/engine/validate";
 
 const create = vi.fn();
 vi.mock("../lib/engine/llm", async (importOriginal) => ({
@@ -108,10 +108,28 @@ describe("length overrun helpers", () => {
     expect(lengthOverrun("channels[0].reason: 80 characters; with the cost text code adds, the reason parts may have at most 67")).toEqual({
       field: "channels[0].reason", max: 67, length: 80,
     });
+    expect(lengthOverrun("scorecard.alternatives.key_figure: value and unit longer than 16 characters combined")).toEqual({
+      field: "scorecard.alternatives.key_figure", max: 16,
+    });
     expect(lengthOverrun("scorecard.finding: no figures (the key figure carries the number)")).toBeNull();
     expect(lengthOverrun("scorecard: expected an object")).toBeNull();
     expect(lengthOverrun("the reply is not valid JSON (Unexpected token)")).toBeNull();
     expect(lengthOverrun("cites 7 distinct sources; the limit is 5")).toBeNull();
+  });
+
+  it("treats a 60-vs-56 finding as a tiny overrun, and refuses a trim that drops a figure", () => {
+    expect(TINY_OVERRUN_RATIO).toBe(0.15);
+    expect(isTinyOverrun(60, 56)).toBe(true);
+    expect(isTinyOverrun(66, 56)).toBe(false);
+    expect(isTinyOverrun(31, 30)).toBe(true);
+    expect(figuresLost("A mobile visit at the owner's door for $80", "A mobile visit at the owner's…")).toBe(true);
+    expect(figuresLost("A licence is needed first.", "A licence is needed…")).toBe(false);
+    expect(trimIsSafe({ scorecard: { finding: FINDING_60 } }, { field: "scorecard.finding", max: 56, length: 60 })).toBe(true);
+    expect(trimIsSafe(
+      { price: { text: "A mobile visit at the owner's door for $80 extra", source: "S1", estimate: null } },
+      { field: "price.text", max: 30, length: 48 },
+    )).toBe(false);
+    expect(trimIsSafe({ signals: [{ value: "6,600 extra" }] }, { field: "signals[0].value", max: 6, length: 11 })).toBe(false);
   });
 
   it("truncates at a word boundary with an ellipsis, and hard-cuts a single word", () => {
@@ -148,25 +166,44 @@ describe("runWriter length recovery", () => {
   const draft = (finding: string) => ({ scorecard: { finding } });
   const write = () => runWriter("blockers", { model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "blockers-write.v1", parse: parseFinding });
 
-  it("repairs a 60-character finding when the writer shortens it", async () => {
-    create.mockResolvedValueOnce(reply(JSON.stringify(draft(FINDING_60)))).mockResolvedValueOnce(reply('{"scorecard.finding": "A licence is needed first."}'));
-    const r = await write();
-    expect(r.value).toEqual(draft("A licence is needed first."));
-    expect(create).toHaveBeenCalledTimes(2);
-    const ask = (create.mock.calls[1][0] as Params).messages.at(-1)!.content;
-    expect(ask).toContain("hard limit of 56 characters");
-    expect(ask).toContain("it is 60 characters");
-    expect(ask).toContain("Rewrite only that field");
-    expect(r.run.retries).toEqual(["scorecard.finding: 60 characters, at most 56"]);
-  });
-
-  it("truncates a 60-character finding after one repair and completes the run", async () => {
+  it("trims a 60-character finding at a word boundary without a second call", async () => {
     create.mockResolvedValue(reply(JSON.stringify(draft(FINDING_60))));
     const r = await write();
     const finding = (r.value as { scorecard: { finding: string } }).scorecard.finding;
     expect(finding.length).toBeLessThanOrEqual(56);
     expect(finding.endsWith("…")).toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(r.run.repair_cost_usd).toBeUndefined();
+    expect(r.run.retries).toEqual([
+      "scorecard.finding: 60 characters, at most 56",
+      expect.stringMatching(/^truncated scorecard\.finding/),
+    ]);
+  });
+
+  it("asks the writer to shorten a non-tiny overrun and records the repair cost", async () => {
+    const long = "x".repeat(80);
+    create.mockResolvedValueOnce(reply(JSON.stringify(draft(long)))).mockResolvedValueOnce(reply('{"scorecard.finding": "A licence is needed first."}'));
+    const r = await write();
+    expect(r.value).toEqual(draft("A licence is needed first."));
+    expect(create).toHaveBeenCalledTimes(2);
+    const ask = (create.mock.calls[1][0] as Params).messages.at(-1)!.content;
+    expect(ask).toContain("hard limit of 56 characters");
+    expect(ask).toContain("it is 80 characters");
+    expect(ask).toContain("Rewrite only that field");
+    expect(r.run.retries).toEqual(["scorecard.finding: 80 characters, at most 56"]);
+    expect(r.run.repair_cost_usd).toBeGreaterThan(0);
+    expect(r.run.repair_cost_usd).toBeLessThanOrEqual(r.run.cost_usd);
+  });
+
+  it("truncates a non-tiny finding after one repair and completes the run", async () => {
+    const long = "x".repeat(80);
+    create.mockResolvedValue(reply(JSON.stringify(draft(long))));
+    const r = await write();
+    const finding = (r.value as { scorecard: { finding: string } }).scorecard.finding;
+    expect(finding.length).toBeLessThanOrEqual(56);
+    expect(finding.endsWith("…")).toBe(true);
     expect(create).toHaveBeenCalledTimes(1 + LENGTH_REPAIR_ATTEMPTS);
+    expect(r.run.repair_cost_usd).toBeGreaterThan(0);
     expect(r.run.retries?.some((x) => x.startsWith("truncated scorecard.finding"))).toBe(true);
   });
 
@@ -203,7 +240,8 @@ describe("section writers", () => {
     const r = await writeBlockers(round1);
     expect(r.value.scorecard.finding.length).toBeLessThanOrEqual(LEN.finding);
     expect(r.value.scorecard.finding.endsWith("…")).toBe(true);
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(r.run.repair_cost_usd).toBeUndefined();
   });
 
   it("completes Idea when headline is over 64 characters", async () => {
@@ -214,7 +252,7 @@ describe("section writers", () => {
     const r = await writeIdea(round1);
     expect(r.value.headline.length).toBeLessThanOrEqual(64);
     expect(r.value.headline.endsWith("…")).toBe(true);
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it("completes Next Tests when description is over 64 characters", async () => {
@@ -224,7 +262,7 @@ describe("section writers", () => {
     create.mockResolvedValue(reply(JSON.stringify({ tests: [{ ...tests.tests[0], description }] })));
     const r = await writeTests(round3);
     expect(r.value.tests[0].description.length).toBeLessThanOrEqual(64);
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it("still fails Blockers when the JSON is missing required fields", async () => {
@@ -264,5 +302,85 @@ describe("writer prompts", () => {
     expect(loadPrompt("idea-write.v1")).toContain("at most 64 characters");
     expect(loadPrompt("tests-write.v1")).toContain("at most 64 characters");
     expect(loadPrompt("verdict-write.v1")).toContain("at most 160 characters");
+    expect(loadPrompt("writer-shared.v1")).toMatch(/stay a few characters under|ten percent under/i);
+    expect(loadPrompt("writer-shared.v1")).toMatch(/Never drop a cited fact or a figure/i);
+    expect(loadPrompt("writer-shared.v1")).toMatch(/unsourced figure must still be tagged Estimated/i);
+  });
+});
+
+function exact(n: number): string {
+  return "x".repeat(n);
+}
+
+describe("length caps at cap+1 through cap+10", () => {
+  const fields = [
+    { name: "scorecard.finding", max: LEN.finding, wrap: (s: string) => ({ scorecard: { finding: s } }) },
+    { name: "headline", max: 64, wrap: (s: string) => ({ headline: s }) },
+    { name: "tests[0].description", max: 64, wrap: (s: string) => ({ tests: [{ description: s }] }) },
+    { name: "alternatives[0].name", max: 26, wrap: (s: string) => ({ alternatives: [{ name: s }] }) },
+    { name: "summary", max: LEN.sentence, wrap: (s: string) => ({ summary: s }) },
+    { name: "blockers[0].risk", max: 36, wrap: (s: string) => ({ blockers: [{ risk: s }] }) },
+  ] as const;
+
+  const parseField = (field: string, max: number) => (json: unknown) => {
+    const s = stringAt(json, field);
+    if (typeof s !== "string" || !s.trim()) throw new Error(`${field}: expected a non-empty string`);
+    if (s.length > max) throw new Error(overLen(field, s.length, max));
+    return json;
+  };
+
+  it.each(fields.flatMap((f) => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((extra) => ({ ...f, extra }))))(
+    "$name at cap+$extra recovers",
+    async ({ name, max, wrap, extra }) => {
+      create.mockResolvedValue(reply(JSON.stringify(wrap(exact(max + extra)))));
+      const r = await runWriter("blockers", {
+        model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "blockers-write.v1",
+        parse: parseField(name, max),
+      });
+      expect(stringAt(r.value, name)!.length).toBeLessThanOrEqual(max);
+    },
+  );
+});
+
+describe("length repair refuses to drop cited facts or figures", () => {
+  it("fails the run when a cited figure stays over the cap after repair", async () => {
+    const parse = (json: unknown) => {
+      const t = stringAt(json, "price.text");
+      if (typeof t !== "string" || !t.trim()) throw new Error("price.text: expected a non-empty string");
+      if (t.length > 30) throw new Error(overLen("price.text", t.length, 30));
+      return json;
+    };
+    const draft = { price: { text: "A mobile visit at the owner's door for $80 extra", source: "S1", estimate: null } };
+    expect(draft.price.text.length).toBeGreaterThan(30);
+    create.mockResolvedValue(reply(JSON.stringify(draft)));
+    const err = await runWriter("alternatives", {
+      model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "alternatives-write.v3", parse,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WriterError);
+    expect((err as WriterError).message).toMatch(/alternatives: writer output invalid: price\.text: \d+ characters, at most 30/);
+    expect(create).toHaveBeenCalledTimes(1 + LENGTH_REPAIR_ATTEMPTS);
+    expect((err as WriterError).run.repair_cost_usd).toBeGreaterThan(0);
+  });
+
+  it("does not save an unsourced figure by trimming the number away", async () => {
+    const parse = (json: unknown) => {
+      const t = stringAt(json, "note[0].text");
+      if (typeof t !== "string" || !t.trim()) throw new Error("note[0].text: expected a non-empty string");
+      if (t.length > 40) throw new Error(overLen("note[0].text", t.length, 40));
+      const note = (json as { note: { source: string | null; estimate: string | null }[] }).note[0];
+      if (/\d/.test(t) && !note.source && !note.estimate) {
+        throw new Error("note[0]: every figure must cite a source or give an estimate method");
+      }
+      return json;
+    };
+    const draft = { note: [{ text: "Travel and shampoo bring the visit to $80 extra", source: null, estimate: null }] };
+    expect(draft.note[0].text.length).toBeGreaterThan(40);
+    create.mockResolvedValue(reply(JSON.stringify(draft)));
+    const err = await runWriter("economics", {
+      model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "economics-write.v2", parse,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WriterError);
+    expect((err as WriterError).message).toMatch(/writer output invalid/);
+    expect(create).toHaveBeenCalledTimes(1 + LENGTH_REPAIR_ATTEMPTS);
   });
 });

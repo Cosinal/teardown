@@ -84,6 +84,8 @@ export interface StageRun {
   pages?: { source: string; url: string; ok: boolean; cached: boolean; chars?: number; error?: string }[];
   /** Fact-check only: what the re-checks after the excerpt pass cost (included in cost_usd). */
   recheck_cost_usd?: number;
+  /** Writers only: what length-repair calls cost (included in cost_usd). */
+  repair_cost_usd?: number;
   /** Fact-check only: fields rewritten for consistency after claims changed. */
   repairs?: { field: string; before: string; after: string }[];
   /** Writers only: why each retry was needed. */
