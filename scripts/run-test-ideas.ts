@@ -205,6 +205,7 @@ async function main() {
       revisions: LATER.filter((n) => find(n, "revise")).join(", ") || "none",
       factcheck_usd: sum(ALL.map((n) => check(n))),
       writer_retries: ALL.map((n) => find(n, "write")?.retries?.length ?? 0).join("/"),
+      writer_repair_usd: round(r.runs.reduce((n, x) => n + (x.repair_cost_usd ?? 0), 0)),
       writer_cache: ALL.map((n) => { const u = find(n, "write")?.usage; return `${n.split("_")[0]} w${u?.cache_creation_input_tokens ?? 0}/r${u?.cache_read_input_tokens ?? 0}`; }).join(", "),
       support_web: `${pct(all("excerptResults").rate)} → ${pct(all("results").rate)} (${show(all("results"))}) → ${afterAll ? `${pct(afterAll.rate)} (${show(afterAll)})` : "–"}`,
       ...Object.fromEntries(WEB.map((n) => [`support_${n.split("_")[0]}`, rates(n)])),

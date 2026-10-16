@@ -23,13 +23,17 @@ const WRITER_EFFORT = "medium";
 /**
  * Writer calls allowed per section for structural errors: the first, plus two
  * retries that are told what failed. Length overruns on display-text fields are
- * different (see runWriter): one cheap repair, then a word-boundary truncate,
- * so a 60-character scorecard.finding does not kill the run.
+ * different (see runWriter): a word-boundary trim when the overrun is tiny and
+ * safe, otherwise one cheap repair, then a safe trim, so a 60-character
+ * scorecard.finding does not kill the run.
  */
 export const WRITE_ATTEMPTS = 3;
 
-/** One extra writer call to shorten over-limit display-text fields. Then we truncate. */
+/** One extra writer call to shorten over-limit display-text fields. Then we trim if safe. */
 export const LENGTH_REPAIR_ATTEMPTS = 1;
+
+/** Overruns this far over the cap (inclusive) are tiny: trim locally, no extra call. */
+export const TINY_OVERRUN_RATIO = 0.15;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -279,7 +283,7 @@ export function problemField(problem: string): string | null {
 /**
  * A display-text length overrun, or null when the problem is anything else
  * (missing fields, wrong types, source rules). Only this shape is repaired
- * then truncated; structural errors stay fatal.
+ * then trimmed when safe; structural errors stay fatal.
  */
 export interface LengthOverrun {
   field: string;
@@ -300,7 +304,26 @@ export function lengthOverrun(problem: string): LengthOverrun | null {
   if (m) return { field, max: Number(m[1]), length: Number(m[2]) };
   m = rest.match(/^longer than (\d+) characters(?: in total)?$/);
   if (m) return { field, max: Number(m[1]) };
+  m = rest.match(/longer than (\d+) characters combined$/);
+  if (m) return { field, max: Number(m[1]) };
   return null;
+}
+
+/** True when `length` is at most 15% over `max` (a 60-character finding vs 56 is tiny). */
+export function isTinyOverrun(length: number, max: number): boolean {
+  return length <= Math.ceil(max * (1 + TINY_OVERRUN_RATIO));
+}
+
+const FIGURE_TOKEN = /\$?\d[\d,]*(?:\.\d+)?(?:\s*[KkMm](?![A-Za-z]))?%?/g;
+
+/** Figure tokens in `text` ($80, 6,600, 40%, $1.2M). */
+export function figureTokens(text: string): string[] {
+  return [...text.matchAll(FIGURE_TOKEN)].map((m) => m[0].trim()).filter(Boolean);
+}
+
+/** True when a figure in `original` is missing from `next`. */
+export function figuresLost(original: string, next: string): boolean {
+  return figureTokens(original).some((t) => !next.includes(t));
 }
 
 function pathKeys(path: string): (string | number)[] {
@@ -402,11 +425,57 @@ export function applyLengthOverrun(json: unknown, overrun: LengthOverrun): unkno
   return out;
 }
 
+function isFigureField(path: string): boolean {
+  return /(^|\.)(value|unit|amount)$/.test(path) || path.includes("key_figure");
+}
+
+function isCitedPath(json: unknown, path: string): boolean {
+  if (!path.endsWith(".text")) return false;
+  const src = valueAt(json, `${path.slice(0, -5)}.source`);
+  return typeof src === "string" && src.trim().length > 0;
+}
+
+function overrunChars(json: unknown, overrun: LengthOverrun): number | undefined {
+  if (overrun.length != null) return overrun.length;
+  const path = resolveTextPath(json, overrun.field);
+  if (path) return stringAt(json, path)?.length;
+  const parts = partTextPaths(json, overrun.field);
+  if (!parts.length) return undefined;
+  return parts.reduce((n, p) => n + (stringAt(json, p)?.length ?? 0), 0);
+}
+
+/**
+ * True when a word-boundary trim of this overrun would not drop a cited fact
+ * or a figure. Figure fields (values, units, amounts) are never trimmed.
+ */
+export function trimIsSafe(json: unknown, overrun: LengthOverrun): boolean {
+  if (isFigureField(overrun.field)) return false;
+  const path = resolveTextPath(json, overrun.field);
+  if (path) {
+    if (isCitedPath(json, path)) return false;
+    const original = stringAt(json, path)!;
+    const trimmed = truncateAtWord(original, overrun.max);
+    return Boolean(trimmed.trim()) && !figuresLost(original, trimmed);
+  }
+  const parts = partTextPaths(json, overrun.field);
+  if (!parts.length) return false;
+  const next = applyLengthOverrun(json, overrun);
+  if (JSON.stringify(next) === JSON.stringify(json)) return false;
+  for (const p of parts) {
+    const before = stringAt(json, p)!;
+    const after = stringAt(next, p)!;
+    if (before === after) continue;
+    if (isCitedPath(json, p) || figuresLost(before, after)) return false;
+  }
+  return true;
+}
+
 function recoverLength<T>(json: unknown, parse: (v: unknown) => T, first: LengthOverrun): { value: T; notes: string[] } | null {
   const notes: string[] = [];
   let cur = json;
   let overrun: LengthOverrun | null = first;
   for (let i = 0; i < 32 && overrun; i++) {
+    if (!trimIsSafe(cur, overrun)) return null;
     const next = applyLengthOverrun(cur, overrun);
     if (JSON.stringify(next) === JSON.stringify(cur)) return null;
     notes.push(`truncated ${overrun.field} to at most ${overrun.max} characters`);
@@ -448,13 +517,15 @@ export interface Revision {
  * real section is the demand_evidence shape, and taking the stub would still
  * fail the run.
  *
- * A length overrun on a display-text field is not fatal: one repair call asks
- * the writer to shorten the named fields (same cached research, no new
- * searches), and if they are still over, the field is truncated at a word
- * boundary with an ellipsis. Structural errors (missing fields, wrong types,
- * citation rules) still retry up to WRITE_ATTEMPTS calls and then fail the run.
- * When the problem is one text field in its reply, the retry asks for that
- * field alone and puts it into the last reply.
+ * A length overrun on a display-text field is not fatal. A tiny overrun
+ * (≤ 15% over) is trimmed at a word boundary when that would not drop a cited
+ * fact or figure. Otherwise one repair call asks the writer to shorten the
+ * named fields (same cached research, no new searches); if they are still
+ * over, a safe trim is applied. Repair never silently drops a cited fact or
+ * figure: those fail the run if the writer cannot shorten them. Structural
+ * errors (missing fields, wrong types, citation rules) still retry up to
+ * WRITE_ATTEMPTS calls and then fail. When the problem is one text field in
+ * its reply, the retry asks for that field alone and puts it into the last reply.
  */
 export async function runWriter<T>(
   stage: Stage,
@@ -474,23 +545,34 @@ export async function runWriter<T>(
   let last: unknown;
   let patching: string | null = null;
   let lengthRepairs = 0;
+  let pendingRepair = false;
+  let repairUsage = ZERO_USAGE;
+  const repairCost = () => {
+    const n = costUsd(model, repairUsage);
+    return n > 0 ? { repair_cost_usd: n } : {};
+  };
   const done = (value: T) => ({
     value,
     run: {
       stage, step: (revise ? "revise" : "write") as "revise" | "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
       cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(),
+      ...repairCost(),
       ...(retries.length && { retries }),
     },
   });
   const fail = (problem: string): never => {
     throw new WriterError(`${stage}: writer output invalid: ${problem}`, {
       stage, step: revise ? "revise" : "write", prompt_version: `${WRITER_SHARED_PROMPT}+${promptVersion}`, model: modelId, usage,
-      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(), retries: [...retries, problem.slice(0, 500)],
+      cost_usd: costUsd(model, usage), started_at: started.toISOString(), duration_ms: Date.now() - started.getTime(), ...repairCost(), retries: [...retries, problem.slice(0, 500)],
     });
   };
   for (let attempt = 1; ; attempt++) {
     const msg = await anthropic().messages.create(writerParams({ model, context, finished, sectionPrompt }, messages), requestOptions());
     usage = addUsage(usage, msg.usage);
+    if (pendingRepair) {
+      repairUsage = addUsage(repairUsage, msg.usage);
+      pendingRepair = false;
+    }
     modelId = msg.model;
     assertFinished(msg, stage);
     const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
@@ -527,8 +609,19 @@ export async function runWriter<T>(
       const problem = err instanceof Error ? err.message : String(err);
       const overrun = last !== undefined ? lengthOverrun(problem) : null;
       if (overrun && last !== undefined) {
+        const chars = overrunChars(last, overrun);
+        const tiny = chars != null && isTinyOverrun(chars, overrun.max);
+        const tryTrim = () => recoverLength(last, parse, overrun);
+        if (tiny) {
+          const recovered = tryTrim();
+          if (recovered) {
+            retries.push(problem.slice(0, 500), ...recovered.notes);
+            return done(recovered.value);
+          }
+        }
         if (lengthRepairs < LENGTH_REPAIR_ATTEMPTS && attempt < WRITE_ATTEMPTS) {
           lengthRepairs++;
+          pendingRepair = true;
           retries.push(problem.slice(0, 500));
           const named = resolveTextPath(last, overrun.field);
           patching = named ?? null;
@@ -538,7 +631,7 @@ export async function runWriter<T>(
           );
           continue;
         }
-        const recovered = recoverLength(last, parse, overrun);
+        const recovered = tryTrim();
         if (recovered) {
           retries.push(problem.slice(0, 500), ...recovered.notes);
           return done(recovered.value);
