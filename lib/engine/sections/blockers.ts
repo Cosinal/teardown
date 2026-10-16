@@ -53,7 +53,7 @@ export function parseBlockers(raw: unknown, ctx: LaterContext, store: SourceStor
   section.blockers.forEach((b, i) => {
     const path = `blockers[${i}].detail`;
     const d = b.detail;
-    rejectStoreId(d.text, `${path}.text`);
+    rejectStoreId(d.text, `${path}.text`, "cite");
     if (d.source && d.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
     if (!d.source && !d.estimate) throw new Error(`${path}: cite the source that states it, or give the estimate method`);
     if (d.source && !ids.has(d.source)) throw new Error(`${path}: ${d.source} is not in the source list`);
@@ -63,7 +63,7 @@ export function parseBlockers(raw: unknown, ctx: LaterContext, store: SourceStor
     }
   });
   const sc = section.scorecard;
-  rejectStoreId(sc.finding, "scorecard.finding");
+  rejectStoreId(sc.finding, "scorecard.finding", "cite");
   if (sc.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", sc.finding.length, LEN.finding));
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
 

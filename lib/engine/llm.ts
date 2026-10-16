@@ -112,6 +112,8 @@ export interface ClaimCheck {
   quote?: string;
   /** Why the page couldn't be used, when it was needed. */
   fetch_error?: string;
+  /** True when the model was not asked because the excerpt/page was clearly about something else. */
+  skipped?: boolean;
 }
 
 export const ZERO_USAGE: TokenUsage = {

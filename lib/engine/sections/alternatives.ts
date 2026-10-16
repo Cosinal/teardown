@@ -55,7 +55,7 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
   const cited = new Set<string>();
 
   const check = (p: { text?: string; source: string | null; estimate: string | null }, path: string) => {
-    if (p.text) rejectStoreId(p.text, `${path}.text`);
+    if (p.text) rejectStoreId(p.text, `${path}.text`, "cite");
     if (p.source && p.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
     if (p.source) {
       if (!ids.has(p.source)) throw new Error(`${path}: ${p.source} is not in the source list`);
@@ -80,7 +80,7 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
     a.weakness.forEach((w, j) => check(w, `${path}.weakness[${j}]`));
   });
   section.market_gap.forEach((m, i) => check(m, `market_gap[${i}]`));
-  rejectStoreId(section.scorecard.finding, "scorecard.finding");
+  rejectStoreId(section.scorecard.finding, "scorecard.finding", "cite");
   check(section.scorecard, "scorecard");
 
   if (section.alternatives.filter((a) => a.workaround).length > 1) throw new Error("alternatives: at most one workaround row");

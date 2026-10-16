@@ -100,7 +100,7 @@ export function parseDemand(raw: unknown, store: SourceStore, maxSources = SOURC
     const path = `signals[${i}]`;
     if (!s.detail.source || s.detail.estimate) throw new Error(`${path}.detail: must cite the source that states the figure (no estimates)`);
     if (!ids.has(s.detail.source)) throw new Error(`${path}.detail: ${s.detail.source} is not in the source list`);
-    rejectStoreId(s.detail.text, `${path}.detail.text`);
+    rejectStoreId(s.detail.text, `${path}.detail.text`, "cite");
     if (!/\d/.test(s.value)) throw new Error(`${path}.value: must be the figure the source states`);
     for (const [field, text, max] of [["signal", s.signal, 26], ["value", s.value, LEN.big], ["detail.text", s.detail.text, 50]] as const) {
       if (text.length > max) throw new Error(overLen(`${path}.${field}`, text.length, max));
@@ -114,7 +114,7 @@ export function parseDemand(raw: unknown, store: SourceStore, maxSources = SOURC
     throw new Error(`scorecard: thin evidence is rated "weak" and the finding starts with "${THIN}"`);
   }
   if (sc.headline !== null && !headlineSignal(section)) throw new Error("scorecard.headline: must be the value of one of the signals, or null");
-  rejectStoreId(sc.finding, "scorecard.finding");
+  rejectStoreId(sc.finding, "scorecard.finding", "cite");
   if (sc.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", sc.finding.length, LEN.finding));
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
   if (sc.headline === null) cited.add(`estimate:${COUNT_METHOD}`);

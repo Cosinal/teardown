@@ -36,32 +36,86 @@ export const UNCONFIRMED_PRICE_METHOD = "Price as written; the cited page did no
 
 const RELEVANCE_STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "their", "its", "are", "not", "but", "per", "year", "month", "only", "than", "into", "about", "what", "does", "cost", "price"]);
 
-/** Figures in a claim, normalised ($50K, 2.9%, 30¢ → 50k / 2.9% / 30). */
-export function claimFigures(text: string): string[] {
-  const out: string[] = [];
-  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(¢|[KkMm](?![A-Za-z])|%)?/g)) {
-    const n = m[1].replace(/,/g, "");
-    const unit = m[2] === "¢" ? "" : (m[2] ?? "").toLowerCase();
-    out.push(`${n}${unit}`);
-  }
-  return [...new Set(out)];
+const WORD_NUM: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+  seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+  sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+
+export interface ClaimFigure { n: number; kind: "num" | "pct" }
+
+function scale(num: string, suf?: string): number {
+  const v = Number(num.replace(/,/g, ""));
+  const u = (suf ?? "").toLowerCase();
+  if (u === "k" || u === "thousand") return v * 1e3;
+  if (u === "m" || u === "million") return v * 1e6;
+  if (u === "b" || u === "billion") return v * 1e9;
+  return v;
 }
 
-function figureIn(fig: string, evidence: string): boolean {
-  const ev = evidence.toLowerCase().replace(/,/g, "");
-  const escaped = fig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![\\d.])${escaped}(?![\\d])`, "i").test(ev);
+/**
+ * Figures in a claim, with K/M/thousand/million, grouping commas, cents,
+ * percent words and number words folded to a magnitude.
+ */
+export function claimFigures(text: string): ClaimFigure[] {
+  let s = text.toLowerCase().replace(/[\u2013\u2014]/g, "-");
+  s = s.replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/g, (w) => String(WORD_NUM[w]));
+  s = s.replace(/\bper\s*cent\b/g, "percent").replace(/(\d[\d,]*(?:\.\d+)?)\s*percent\b/g, "$1%");
+
+  const out: ClaimFigure[] = [];
+  const add = (n: number, kind: ClaimFigure["kind"]) => {
+    if (!Number.isFinite(n)) return;
+    if (!out.some((f) => f.kind === kind && Math.abs(f.n - n) < 1e-9)) out.push({ n, kind });
+  };
+  for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*¢/g)) add(scale(m[1]!) / 100, "num");
+  for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*cents?\b/g)) add(scale(m[1]!) / 100, "num");
+  for (const m of s.matchAll(/\$(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb](?![a-z]))?/gi)) add(scale(m[1]!, m[2]), "num");
+  for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb](?![a-z]))\b/gi)) add(scale(m[1]!, m[2]), "num");
+  for (const m of s.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*%/g)) add(scale(m[1]!), "pct");
+  for (const m of s.matchAll(/(?<![$\d.a-z])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![\d.%¢]|[kmb]\b|\s*(?:cents?|percent|thousand|million|billion)\b)/gi)) add(scale(m[1]!), "num");
+  return out;
 }
 
-/** Words of at least 4 letters, minus stopwords. */
-export function tokens(text: string): string[] {
-  return [...new Set((text.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? []).filter((w) => !RELEVANCE_STOP.has(w)))];
+export function figuresEqual(a: ClaimFigure, b: ClaimFigure): boolean {
+  if (a.kind !== b.kind) return false;
+  return Math.abs(a.n - b.n) <= Math.max(1e-6, Math.abs(a.n) * 1e-6);
 }
 
-/** True when any token of `a` is a substring of any token of `b`, or the reverse (indiehackers vs indie). */
+export function figuresOverlap(claim: string, evidence: string): boolean {
+  const a = claimFigures(claim), b = claimFigures(evidence);
+  return a.some((x) => b.some((y) => figuresEqual(x, y)));
+}
+
+/** Words of at least `minLen` letters (default 4), minus stopwords. */
+export function tokens(text: string, minLen = 4): string[] {
+  const re = new RegExp(`[a-z][a-z0-9]{${minLen - 1},}`, "g");
+  return [...new Set((text.toLowerCase().match(re) ?? []).filter((w) => !RELEVANCE_STOP.has(w)))];
+}
+
+function stem(w: string): string {
+  if (w.length < 5) return w;
+  if (w.endsWith("ies")) return `${w.slice(0, -3)}y`;
+  if (w.endsWith("ing") || w.endsWith("ion")) return w.slice(0, -3);
+  if (w.endsWith("ers")) return w.slice(0, -1);
+  if (w.endsWith("es")) return w.slice(0, -2);
+  if (w.endsWith("ed")) return w.slice(0, -2);
+  if (w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
+  return w;
+}
+
+function termsMatch(x: string, y: string): boolean {
+  if (x === y || x.includes(y) || y.includes(x)) return true;
+  const sx = stem(x), sy = stem(y);
+  if (sx === sy) return true;
+  const n = Math.min(sx.length, sy.length);
+  return n >= 4 && (sx.startsWith(sy) || sy.startsWith(sx));
+}
+
+/** True when any token of `a` matches any of `b` by substring, stem or prefix. Empty sets do not match. */
 export function sharesTerm(a: string[], b: string[]): boolean {
   if (!a.length || !b.length) return false;
-  return a.some((x) => b.some((y) => x.includes(y) || y.includes(x)));
+  return a.some((x) => b.some((y) => termsMatch(x, y)));
 }
 
 /**
@@ -81,48 +135,59 @@ function evidenceText(source: Pick<Source, "title" | "url" | "excerpt">, pageTex
   return [source.title, source.url, source.excerpt, pageText ?? ""].join("\n");
 }
 
+/** `skip` is a clear miss (no Haiku). `unsure` is a borderline miss — fall through to Haiku. */
+export type Relevance = "relevant" | "skip" | "unsure";
+
 /**
  * Cheap check that the cited page is about this claim, before asking the model.
- * A claim whose figures never appear, or whose product name never appears, is
- * unsupported without a Haiku call. Figures that do appear bypass the product
- * check (a card-fee excerpt may sit under an unrelated title).
+ * Format variants of the same figure count as a hit. A miss when the page has
+ * numbers of its own, or a product name that produced no tokens, is `unsure`
+ * so Haiku still sees it. Only a page with no figures at all, or a product
+ * name that doesn't stem-match, is skipped.
  */
 export function claimRelevant(
   claim: string,
   source: Pick<Source, "title" | "url" | "excerpt">,
   context = "",
   pageText?: string,
-): boolean {
+): Relevance {
   const evidence = evidenceText(source, pageText);
-  const figs = claimFigures(claim);
-  const figHit = figs.some((f) => figureIn(f, evidence));
-  if (figs.length && !figHit) return false;
-  if (figHit) return true;
+  const cFigs = claimFigures(claim);
+  const eFigs = claimFigures(evidence);
+  if (cFigs.some((c) => eFigs.some((e) => figuresEqual(c, e)))) return "relevant";
 
   const product = rowProduct(context);
-  if (product && !sharesTerm(tokens(product), tokens(evidence))) return false;
+  if (product) {
+    const pToks = tokens(product);
+    if (!pToks.length) return "unsure";
+    if (!sharesTerm(pToks, tokens(evidence))) return "skip";
+  }
+
+  if (cFigs.length && eFigs.length === 0) return "skip";
+  if (cFigs.length) return "unsure";
 
   if (/^Demand evidence/.test(context)) {
     const long = tokens(claim).filter((t) => t.length >= 5);
     const surface = `${source.title} ${source.url} ${source.excerpt}`;
-    if (long.length && !sharesTerm(long, tokens(surface))) return false;
+    if (long.length && !sharesTerm(long, tokens(surface))) return "skip";
   }
-  return true;
+  return "relevant";
 }
 
-function irrelevantResult(id: string, basis: "excerpt" | "page", excerptVerdict: Verdict = "unsupported"): CheckResult {
+function skipResult(id: string, basis: "excerpt" | "page", excerptVerdict: Verdict = "unsupported"): CheckResult {
   return {
     id,
     verdict: "unsupported",
     reason: basis === "page"
-      ? "The cited page does not mention this claim's figures or subject."
-      : "The cited page's title, URL and excerpt do not mention this claim's figures or subject.",
+      ? "Skipped model check: the cited page does not mention this claim's figures or subject."
+      : "Skipped model check: the cited page's title, URL and excerpt do not mention this claim's figures or subject.",
     action: "drop",
     text: null,
     method: null,
     quote: null,
     basis,
     excerpt_verdict: excerptVerdict,
+    skipped: true,
   };
 }
 
@@ -161,6 +226,8 @@ export interface CheckResult {
   quote?: string | null;
   /** Why the page couldn't be used, when it was needed. */
   fetch_error?: string;
+  /** True when the model was not asked because the excerpt/page was clearly about something else. */
+  skipped?: boolean;
 }
 
 export interface CheckOptions {
@@ -282,8 +349,17 @@ function fix(section: AlternativesSection, loc: Location, action: FixHow, r: Che
     return s;
   }
   if (loc.kind === "price") {
-    // A dropped price becomes "Not public"; the section rules check the row still cites a source.
-    const p = action === "drop" ? { text: PRICE_NOT_PUBLIC, source: null, estimate: null } : edit(row.price);
+    // A dropped or unconfirmed price becomes "Not public". Keeping the written
+    // figure would show another product's number as this rival's.
+    if (action === "drop") {
+      row.price = { text: PRICE_NOT_PUBLIC, source: null, estimate: null };
+      return s;
+    }
+    if (action === "estimate") {
+      row.price = { text: PRICE_NOT_PUBLIC, source: null, estimate: method || UNCONFIRMED_PRICE_METHOD };
+      return s;
+    }
+    const p = edit(row.price);
     if (!p) return null;
     row.price = p;
     return s;
@@ -378,6 +454,7 @@ export function applyChecks<T>(check: SectionCheck<T>, section: T, claims: Check
       ...(r.excerpt_verdict && r.excerpt_verdict !== r.verdict && { excerpt_verdict: r.excerpt_verdict }),
       ...(r.quote && { quote: r.quote }),
       ...(r.fetch_error && { fetch_error: r.fetch_error }),
+      ...(r.skipped && { skipped: true }),
     };
     if (row !== undefined && droppedRows.has(row)) {
       log.push({ ...entry, action: "dropped", result: "(row dropped)" });
@@ -590,7 +667,7 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
 
   const excerptCheck = async (c: CheckClaim): Promise<CheckResult> => {
     const source = byId.get(c.source);
-    if (source && !claimRelevant(c.text, source, c.context)) return irrelevantResult(c.id, "excerpt");
+    if (source && claimRelevant(c.text, source, c.context) === "skip") return skipResult(c.id, "excerpt");
     const { r } = await ask(c, "excerpt");
     return { id: c.id, ...r, quote: null, basis: "excerpt" as const, excerpt_verdict: r.verdict };
   };
@@ -600,7 +677,7 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
   const excerptResults: CheckResult[] = new Array(claims.length);
   const firstJudge = claims.findIndex((c) => {
     const s = byId.get(c.source);
-    return !s || claimRelevant(c.text, s, c.context);
+    return !s || claimRelevant(c.text, s, c.context) !== "skip";
   });
   if (firstJudge < 0) {
     for (let i = 0; i < claims.length; i++) excerptResults[i] = await excerptCheck(claims[i]);
@@ -633,9 +710,9 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
       return { ...stricter(first, { id: c.id, ...r, quote: null }), basis: "excerpt", excerpt_verdict: first.verdict, fetch_error: loaded.page.error };
     }
     const window = pageWindow(loaded.page.text, { claim: c.text, excerpt: source?.excerpt ?? "", context: c.context });
-    // Excerpt was not about this claim: only judge the page if it is.
-    if (source && !claimRelevant(c.text, source, c.context) && !claimRelevant(c.text, source, c.context, window)) {
-      return irrelevantResult(c.id, "page", first.verdict);
+    // Excerpt was a clear miss: only judge the page if it might still match.
+    if (source && claimRelevant(c.text, source, c.context) === "skip" && claimRelevant(c.text, source, c.context, window) === "skip") {
+      return skipResult(c.id, "page", first.verdict);
     }
     const evidence = `${window}\n${source?.excerpt ?? ""}`;
     const once = async () => requireQuote((await ask(c, "recheck", window)).r, evidence);

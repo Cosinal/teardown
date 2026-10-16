@@ -134,7 +134,7 @@ export function parseDistribution(raw: unknown, ctx: LaterContext, store: Source
     cite(c.cac, `${path}.cac`);
     if (!c.reason.length || c.reason.length > 2) throw new Error(`${path}.reason: 1 or 2 parts`);
     c.reason.forEach((p, j) => {
-      rejectStoreId(p.text, `${path}.reason[${j}].text`);
+      rejectStoreId(p.text, `${path}.reason[${j}].text`, "cite");
       cite(p, `${path}.reason[${j}]`);
       if (/\d/.test(p.text) && !p.source && !p.estimate) throw new Error(`${path}.reason[${j}]: every figure must cite a source or give an estimate method`);
     });
@@ -143,7 +143,7 @@ export function parseDistribution(raw: unknown, ctx: LaterContext, store: Source
     if (own > room) throw new Error(`${path}.reason: ${own} characters; with the cost text code adds, the reason parts may have at most ${room}`);
   });
   const sc = section.scorecard;
-  rejectStoreId(sc.finding, "scorecard.finding");
+  rejectStoreId(sc.finding, "scorecard.finding", "cite");
   if (sc.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", sc.finding.length, LEN.finding));
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
 

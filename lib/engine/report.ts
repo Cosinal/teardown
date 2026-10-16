@@ -10,7 +10,7 @@ import type { IdeaSection } from "./sections/idea";
 import { testsReport, type TestsSection } from "./sections/tests";
 import type { VerdictSection } from "./sections/verdict";
 import { PRICE_NOT_PUBLIC, type Alternative, type Claim, type DemandSignal, type Figure, type Rich, type ScoreEntry, type Source, type TeardownReport, type Working } from "./types";
-import { LIMITS, ReportError, parsePartialReport, parseReport, stripStoreIds, type PartialReport } from "./validate";
+import { LIMITS, ReportError, parsePartialReport, parseReport, stripStoreCites, stripStoreIds, type PartialReport } from "./validate";
 
 // Turns section drafts, which cite SourceStore ids ("S12") or estimate
 // methods, into a TeardownReport, which cites 1-based indices into its own
@@ -110,8 +110,8 @@ function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date
     return index.get(key)!;
   };
 
-  const displayed = (text: string, path: string): string => {
-    const next = stripStoreIds(text);
+  const displayed = (text: string, path: string, strip: (s: string) => string): string => {
+    const next = strip(text);
     if (!next) throw new ReportError(`${path}: text empty after removing source ids`);
     return next;
   };
@@ -121,14 +121,14 @@ function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date
       const s = byId.get(p.source);
       if (!s) throw new ReportError(`${path}: unknown source id ${p.source}`);
       if (s.retrieved_at > retrieved) retrieved = s.retrieved_at;
-      return { text: displayed(p.text, path), basis: "found", source: add(s.id, () => ({ basis: "found", text: sourceText(s), url: s.url })) };
+      return { text: displayed(p.text, path, stripStoreCites), basis: "found", source: add(s.id, () => ({ basis: "found", text: sourceText(s), url: s.url })) };
     }
     if (p.estimate) {
       const method = stripStoreIds(p.estimate);
       if (!method) throw new ReportError(`${path}: estimate method empty after removing source ids`);
-      return { text: displayed(p.text, path), basis: "estimated", source: add(`estimate:${method}`, () => ({ basis: "estimated", text: `Estimate. ${method}` })) };
+      return { text: displayed(p.text, path, stripStoreCites), basis: "estimated", source: add(`estimate:${method}`, () => ({ basis: "estimated", text: `Estimate. ${method}` })) };
     }
-    return displayed(p.text, path);
+    return displayed(p.text, path, stripStoreCites);
   };
 
   const claim = (p: Part, path: string): Claim => {
@@ -217,11 +217,11 @@ function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date
   return assembled;
 }
 
-/** Strips leftover SourceStore ids from display strings. Found page titles may mention S3. */
+/** Strips leftover citation-shaped store ids. Idea fields and found titles may mention S3. */
 function sanitizeAssembled(report: Record<string, unknown>): void {
   const walk = (v: unknown, path: string): unknown => {
     if (typeof v === "string") {
-      const next = stripStoreIds(v);
+      const next = /^sources\[\d+\]\.text$/.test(path) ? stripStoreIds(v) : stripStoreCites(v);
       return next || v;
     }
     if (Array.isArray(v)) {
@@ -233,6 +233,7 @@ function sanitizeAssembled(report: Record<string, unknown>): void {
     if (v && typeof v === "object") {
       const o = v as Record<string, unknown>;
       for (const [k, val] of Object.entries(o)) {
+        if (k === "idea" && path === "") continue;
         if (/^sources\[\d+\]$/.test(path) && (k === "text" || k === "url") && o.basis === "found") continue;
         o[k] = walk(val, path ? `${path}.${k}` : k);
       }

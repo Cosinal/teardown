@@ -119,7 +119,7 @@ function VerdictPage({ r, label }: { r: TeardownReport; label?: string }) {
   return (
     <Sheet n={1} report={r} cover>
       <div>
-        <div className="td-eyebrow">Tearitdown{label && ` · ${label}`}</div>
+        <div className="td-eyebrow">Idea teardown{label && ` · ${label}`}</div>
         <h1 className="td-title">{r.idea.headline}</h1>
       </div>
 

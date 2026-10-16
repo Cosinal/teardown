@@ -124,8 +124,14 @@ describe("parseAlternatives", () => {
     leak.alternatives[1].price = est("2 to 4 hours", "(S19 median rate) of similar work");
     expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
     leak.alternatives[1].price = est("2 to 4 hours", "Analyst time per statement, from sample statements");
-    leak.alternatives[0].weakness[0] = found("Sold as a whole platform S27", "S27");
+    leak.alternatives[0].weakness[0] = found("Sold as a whole platform (S27)", "S27");
     expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
+  });
+
+  it("allows product names like Amazon S3 in writer prose", () => {
+    const ok = structuredClone(section);
+    ok.alternatives[0].weakness[0] = found("Amazon S3 backups sit outside the plan.", "S27");
+    expect(parseAlternatives(ok, store).alternatives[0].weakness[0].text).toContain("Amazon S3");
   });
 
   it("applies the report's length limits, naming the field", () => {

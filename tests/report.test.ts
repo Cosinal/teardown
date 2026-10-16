@@ -6,7 +6,7 @@ import { SAMPLE_REPORT } from "../lib/engine/fixtures/sample";
 import { buildPartialReport, contentWords, hostLabel, sourceText } from "../lib/engine/report";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
-import { parseReport, stripStoreIds } from "../lib/engine/validate";
+import { parseReport, stripStoreCites, stripStoreIds } from "../lib/engine/validate";
 
 const src = (id: string, url: string, title: string, excerpt: string) =>
   ({ id, url, title, retrieved_at: "2026-10-12T00:00:00.000Z", excerpt });
@@ -30,6 +30,10 @@ describe("stripStoreIds", () => {
     expect(stripStoreIds("(S19 median rate)")).toBe("median rate");
     expect(stripStoreIds("Analyst hours [S12] per statement")).toBe("Analyst hours per statement");
     expect(stripStoreIds("From S19 and S2")).toBe("From and");
+  });
+
+  it("leaves Amazon S3 and Galaxy S23 in citation-shaped stripping", () => {
+    expect(stripStoreCites("Amazon S3 and Galaxy S23")).toBe("Amazon S3 and Galaxy S23");
   });
 });
 
@@ -90,6 +94,23 @@ describe("buildPartialReport citations", () => {
     expect(b.alternatives![1].price).toMatchObject({ source: 2 });
   });
 
+  it("keeps Amazon S3 and Galaxy S23 in idea fields through assemble", () => {
+    const report = buildPartialReport(
+      {
+        alternatives: section(est("$4.80", "median rate of similar tools")),
+        idea: {
+          name: "Amazon S3 backup",
+          headline: "Galaxy S23 photo backup",
+          customer: "Phone owners on Amazon S3",
+          problem: "Galaxy S23 photos fill the camera roll.",
+          revenue: "One-time fee.",
+        },
+      },
+      [src("S1", "https://a.example", "Page S1", "Quote from S1")],
+    );
+    expect(report.idea).toMatchObject({ name: "Amazon S3 backup", headline: "Galaxy S23 photo backup" });
+  });
+
   it("strips a store id out of an estimate method before the sources page sees it", () => {
     const report = buildPartialReport(
       { alternatives: section(est("$4.80", "(S19 median rate) of similar tools")) },
@@ -116,14 +137,31 @@ describe("parseReport store ids", () => {
     foundSource.text = "Amazon S3 pricing";
     expect(parseReport(report).sources.find((s) => s.url === foundSource.url)?.text).toBe("Amazon S3 pricing");
   });
+
+  it("allows Amazon S3 and Galaxy S23 in idea fields and writer prose", () => {
+    const report = structuredClone(SAMPLE_REPORT);
+    report.idea.name = "Amazon S3 backup for founders";
+    report.idea.headline = "Galaxy S23 cases sold as a kit";
+    report.alternatives[0].weakness = "Amazon S3 holds Galaxy S23 photos.";
+    const parsed = parseReport(report);
+    expect(parsed.idea.name).toContain("Amazon S3");
+    expect(parsed.idea.headline).toContain("Galaxy S23");
+    expect(parsed.alternatives[0].weakness).toBe("Amazon S3 holds Galaxy S23 photos.");
+  });
+
+  it("still rejects a citation-shaped store id in writer prose", () => {
+    const report = structuredClone(SAMPLE_REPORT);
+    report.alternatives[0].weakness = "Holds photos (S12).";
+    expect(() => parseReport(report)).toThrow(/source id/);
+  });
 });
 
 describe("Report branding", () => {
   it("shows Tearitdown in the sheet header and cover eyebrow", () => {
     const html = renderToStaticMarkup(createElement(Report, { report: SAMPLE_REPORT, label: "Sample report" }));
     expect(html).toContain(">Tearitdown</div>");
-    expect(html).toContain('class="td-eyebrow">Tearitdown · Sample report</div>');
-    expect(html).not.toContain('class="td-eyebrow">Idea teardown');
+    expect(html).toContain('class="td-eyebrow">Idea teardown · Sample report</div>');
+    expect(html).not.toContain('class="td-eyebrow">Tearitdown');
     expect(html).not.toMatch(/class="td-brand">teardown</);
   });
 });
