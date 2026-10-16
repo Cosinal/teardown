@@ -30,6 +30,39 @@ export function overLen(path: string, length: number, max: number): string {
 
 export class ReportError extends Error {}
 
+/** SourceStore ids ("S12", "S19") as a word. Used on estimate methods, where the leak was. */
+export const STORE_ID_RE = /\bS\d+\b/;
+/** Citation-shaped ids in prose: "(S19)" or "[S12]". Does not match Amazon S3 or Galaxy S23. */
+export const STORE_CITE_RE = /[\(\[]S\d+[\)\]]/;
+
+export function hasStoreId(text: string, kind: "any" | "cite" = "any"): boolean {
+  return (kind === "cite" ? STORE_CITE_RE : STORE_ID_RE).test(text);
+}
+
+/** Tells a writer to cite via `source` instead of putting the id in prose. `cite` ignores product names like S3. */
+export function rejectStoreId(text: string, path: string, kind: "any" | "cite" = "any"): void {
+  const m = text.match(kind === "cite" ? STORE_CITE_RE : STORE_ID_RE);
+  if (m) throw new Error(`${path}: do not put source ids such as ${m[0].replace(/[()[\]]/g, "")} in displayed text or the estimate method; cite with the source field`);
+}
+
+function tidy(text: string): string {
+  return text.replace(/[ \t]{2,}/g, " ").replace(/ \./g, ".").trim();
+}
+
+/** Drops parenthetical citations, e.g. "(S19 median rate)" → "median rate". Leaves Amazon S3 alone. */
+export function stripStoreCites(text: string): string {
+  return tidy(
+    text
+      .replace(/\(\s*S\d+(?:\s+([^)]*))?\)/g, (_m, rest: string | undefined) => rest?.trim() ?? "")
+      .replace(/\[\s*S\d+(?:\s+([^\]]*))?\]/g, (_m, rest: string | undefined) => rest?.trim() ?? ""),
+  );
+}
+
+/** Drops parenthetical or bare store ids. For estimate methods, not user-derived idea fields. */
+export function stripStoreIds(text: string): string {
+  return tidy(stripStoreCites(text).replace(/\bS\d+\b/g, ""));
+}
+
 type Obj = Record<string, unknown>;
 
 function fail(path: string, msg: string): never {
@@ -285,7 +318,44 @@ function parseFields(input: unknown, complete: boolean): PartialReport {
       };
     });
   }
+  guardStoreIds(out);
   return out;
+}
+
+/**
+ * Store ids on estimated source lines are a leak. Writer prose is only
+ * checked for citation-shaped "(S12)" / "[S19]". User-derived idea fields
+ * (Amazon S3, Galaxy S23) and found page titles are left alone.
+ */
+function guardStoreIds(report: PartialReport): void {
+  const walk = (v: unknown, path: string, kind: "any" | "cite") => {
+    if (typeof v === "string") {
+      if (hasStoreId(v, kind)) {
+        const m = v.match(kind === "cite" ? STORE_CITE_RE : STORE_ID_RE)!;
+        fail(path, `contains a source id (${m[0]}); numbered citations belong in source, not in the text`);
+      }
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((x, i) => walk(x, `${path}[${i}]`, kind));
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const [k, val] of Object.entries(v as Obj)) {
+        walk(val, path ? `${path}.${k}` : k, kind);
+      }
+    }
+  };
+  for (const [k, val] of Object.entries(report)) {
+    if (k === "idea") continue;
+    if (k === "sources") {
+      report.sources.forEach((s, i) => {
+        if (s.basis === "estimated") walk(s.text, `sources[${i}].text`, "any");
+      });
+      continue;
+    }
+    walk(val, k, "cite");
+  }
 }
 
 function isoDate(v: unknown, path: string): string {

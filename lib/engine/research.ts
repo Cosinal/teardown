@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { IdeaSpec } from "./intake";
 import { STAGE_MODELS, ZERO_USAGE, addUsage, anthropic, assertFinished, costUsd, loadPrompt, requestOptions, type StageRun, type TokenUsage } from "./llm";
 
-export const RESEARCH_PROMPT = "research.v2";
+export const RESEARCH_PROMPT = "research.v3";
 
 /** Default web searches allowed per request. Override with the maxSearches option. */
 export const MAX_SEARCHES = 6;

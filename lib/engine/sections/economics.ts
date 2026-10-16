@@ -5,7 +5,7 @@ import { BILLING_LABEL, type IntakeInput } from "../input";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { SOURCE_BUDGETS, buildPartialReport } from "../report";
 import type { SourceStore } from "../research";
-import { LEN, overLen } from "../validate";
+import { LEN, overLen, rejectStoreId } from "../validate";
 import { PartSchema, type Part } from "./alternatives";
 import { runSectionResearch, runWriter, type SectionOptions } from "./common";
 import { SECTIONS } from "./config";
@@ -166,6 +166,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
     if (!input.note.some((p) => p.source || p.estimate)) throw new Error(`${name}.note: needs at least one part that cites a source or gives an estimate`);
     input.note.forEach((p, j) => {
       const path = `${name}.note[${j}]`;
+      rejectStoreId(p.text, `${path}.text`, "cite");
       if (p.source && p.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
       if (/\d/.test(p.text) && !p.source && !p.estimate) throw new Error(`${path}: every figure must cite a source or give an estimate method`);
       if (p.source) {
@@ -173,6 +174,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
         cited.add(p.source);
       }
       if (p.estimate) {
+        rejectStoreId(p.estimate, `${path}.estimate`);
         if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, p.estimate.trim().length, ESTIMATE_MAX));
         cited.add(`estimate:${p.estimate.trim()}`);
       }
@@ -188,6 +190,7 @@ export function parseEconomics(raw: unknown, store: SourceStore, maxSources = SO
   if (section.per.length > 20) throw new Error(overLen("per", section.per.length, 20));
   if (!section.break_even_unit.trim()) throw new Error("break_even_unit: empty");
   if (section.break_even_unit.length > 20) throw new Error(overLen("break_even_unit", section.break_even_unit.length, 20));
+  rejectStoreId(section.scorecard.finding, "scorecard.finding", "cite");
   if (section.scorecard.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", section.scorecard.finding.length, LEN.finding));
   if (/\d/.test(section.scorecard.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
   if (cited.size > maxSources) throw new Error(`cites ${cited.size} distinct sources and estimate methods, counting the arithmetic; the limit is ${maxSources}`);

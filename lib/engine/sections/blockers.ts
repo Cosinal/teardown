@@ -3,7 +3,7 @@ import type { CheckClaim, Fixed, SectionCheck } from "../factcheck";
 import { STAGE_MODELS, loadPrompt } from "../llm";
 import { sourcesUsed } from "../report";
 import type { SourceStore } from "../research";
-import { LEN, LIMITS, overLen } from "../validate";
+import { LEN, LIMITS, overLen, rejectStoreId } from "../validate";
 import { PartSchema, type Part } from "./alternatives";
 import { runWriter, type SectionOptions } from "./common";
 import type { LaterContext } from "./later";
@@ -53,12 +53,17 @@ export function parseBlockers(raw: unknown, ctx: LaterContext, store: SourceStor
   section.blockers.forEach((b, i) => {
     const path = `blockers[${i}].detail`;
     const d = b.detail;
+    rejectStoreId(d.text, `${path}.text`, "cite");
     if (d.source && d.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
     if (!d.source && !d.estimate) throw new Error(`${path}: cite the source that states it, or give the estimate method`);
     if (d.source && !ids.has(d.source)) throw new Error(`${path}: ${d.source} is not in the source list`);
-    if (d.estimate && d.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, d.estimate.trim().length, ESTIMATE_MAX));
+    if (d.estimate) {
+      rejectStoreId(d.estimate, `${path}.estimate`);
+      if (d.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, d.estimate.trim().length, ESTIMATE_MAX));
+    }
   });
   const sc = section.scorecard;
+  rejectStoreId(sc.finding, "scorecard.finding", "cite");
   if (sc.finding.length > LEN.finding) throw new Error(overLen("scorecard.finding", sc.finding.length, LEN.finding));
   if (/\d/.test(sc.finding)) throw new Error("scorecard.finding: no figures (the key figure carries the number)");
 

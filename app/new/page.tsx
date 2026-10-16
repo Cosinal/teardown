@@ -8,7 +8,7 @@ import { isOwnerToken, ownerCookie } from "@/lib/payments";
 import "@/styles/new.css";
 
 export const metadata: Metadata = {
-  title: "New teardown — Teardown",
+  title: "New readout — Tearitdown",
   robots: { index: false },
 };
 
@@ -50,14 +50,14 @@ export default async function NewTeardown({ searchParams }: { searchParams: Prom
   for (const [k, v] of Object.entries(attr)) if (v) values[k] = v;
   return (
     <>
-      <header><div className="wrap"><a href="/">Teardown</a><span>New teardown</span></div></header>
+      <header><div className="wrap"><a href="/">Tearitdown</a><span>New readout</span></div></header>
       <main><div className="wrap">
-        <p className="eyebrow">New teardown</p>
+        <p className="eyebrow">New readout</p>
         <h1>Describe your idea.</h1>
         <p className="pitch">Four questions, a minute to answer. The more specific you are, the sharper the readout.</p>
         <IntakeForm values={values} admin={admin} />
       </div></main>
-      <footer><div className="wrap"><span>© 2026 Teardown</span><a href="/privacy">Privacy Policy</a><a href="/data">Data Policy</a></div></footer>
+      <footer><div className="wrap"><span>© 2026 Tearitdown</span><a href="/privacy">Privacy Policy</a><a href="/data">Data Policy</a></div></footer>
     </>
   );
 }

@@ -73,7 +73,7 @@ function Sheet({ n, report, cover, footnote, children }: { n: number; report: Te
   return (
     <div className="td-sheet">
       <header className="td-head">
-        <div className="td-brand">teardown</div>
+        <div className="td-brand">Tearitdown</div>
         <div className="td-subject">{report.idea.name}</div>
         <div className="td-date">{formatDate(report.date)}</div>
       </header>

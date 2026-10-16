@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import real from "./fixtures/research-response.json";
+import { loadPrompt } from "../lib/engine/llm";
 import { SOURCE_BUDGETS, buildPartialReport } from "../lib/engine/report";
 import type { IdeaSpec } from "../lib/engine/intake";
-import type { SourceStore } from "../lib/engine/research";
-import { parseAlternatives, researchAlternatives, writeAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
+import { RESEARCH_PROMPT, type SourceStore } from "../lib/engine/research";
+import { ALTERNATIVES_RESEARCH_PROMPT, ALTERNATIVES_WRITE_PROMPT, parseAlternatives, researchAlternatives, writeAlternatives, type AlternativesSection } from "../lib/engine/sections/alternatives";
 import { WriterError, mergeSources, parseJsonText, runSectionResearch, runWriter, writerContext, writerParams } from "../lib/engine/sections/common";
+import { SECTIONS } from "../lib/engine/sections/config";
 import { writeDemand, type DemandSection } from "../lib/engine/sections/demand";
 
 const create = vi.fn();
@@ -117,6 +119,21 @@ describe("parseAlternatives", () => {
     expect(() => parseAlternatives(both, store)).toThrow(/not both/);
   });
 
+  it("rejects a store id left in displayed text or the estimate method", () => {
+    const leak = structuredClone(section);
+    leak.alternatives[1].price = est("2 to 4 hours", "(S19 median rate) of similar work");
+    expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
+    leak.alternatives[1].price = est("2 to 4 hours", "Analyst time per statement, from sample statements");
+    leak.alternatives[0].weakness[0] = found("Sold as a whole platform (S27)", "S27");
+    expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
+  });
+
+  it("allows product names like Amazon S3 in writer prose", () => {
+    const ok = structuredClone(section);
+    ok.alternatives[0].weakness[0] = found("Amazon S3 backups sit outside the plan.", "S27");
+    expect(parseAlternatives(ok, store).alternatives[0].weakness[0].text).toContain("Amazon S3");
+  });
+
   it("applies the report's length limits, naming the field", () => {
     const long = { ...section, alternatives: [{ ...section.alternatives[0], name: "A name that is far too long for the page" }] };
     expect(() => parseAlternatives(long, store)).toThrow(/alternatives\[0\]\.name: \d+ characters, at most 26/);
@@ -197,7 +214,7 @@ describe("section stages (Anthropic mocked)", () => {
   });
 
   it("makes no API call for a section with 0 searches", async () => {
-    const r = await runSectionResearch("alternatives", { spec, store, notes: "", searches: 0, model: "claude-sonnet-5-5", prompt: "alternatives-research.v1" });
+    const r = await runSectionResearch("alternatives", { spec, store, notes: "", searches: 0, model: "claude-sonnet-5-5", prompt: "alternatives-research.v2" });
     expect(create).not.toHaveBeenCalled();
     expect(r).toEqual({ sources: store, changed: [], notes: "", run: null, responses: [] });
   });
@@ -209,7 +226,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(r.sources.map((s) => s.id)).toEqual(["S1", "S2", "S27", "S28", "S29", "S30"]);
     expect(r.changed.map((s) => s.id)).toEqual(["S28", "S29", "S30"]);
     expect(r.notes).toContain("[S30]");
-    expect(r.run).toMatchObject({ stage: "alternatives", step: "research", prompt_version: "alternatives-research.v1" });
+    expect(r.run).toMatchObject({ stage: "alternatives", step: "research", prompt_version: "alternatives-research.v2" });
     expect(create.mock.calls[0][0].tools[0]).toMatchObject({ max_uses: 6 });
   });
 
@@ -227,7 +244,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(first).not.toHaveProperty("output_config.format");
     const retry = create.mock.calls[1][0].messages;
     expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: 100 characters, at most 56/);
-    expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v3" });
+    expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v2+alternatives-write.v4" });
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 
@@ -280,5 +297,34 @@ describe("section stages (Anthropic mocked)", () => {
       { role: "user", content: "summary (partial): fix it" },
     ]);
     expect(r.run.step).toBe("revise");
+  });
+});
+
+describe("competitor coverage prompts", () => {
+  it("keeps the alternatives search cap at 6 and does not raise it", () => {
+    expect(SECTIONS.alternatives.searches).toBe(6);
+    expect(loadPrompt(ALTERNATIVES_RESEARCH_PROMPT)).toContain("{{max_searches}} at most");
+    expect(loadPrompt(RESEARCH_PROMPT)).toContain("at most {{max_searches}} searches");
+  });
+
+  it("tells research to cover the category from several angles and keep named direct competitors", () => {
+    const shared = loadPrompt(RESEARCH_PROMPT);
+    const section = loadPrompt(ALTERNATIVES_RESEARCH_PROMPT);
+    for (const text of [shared, section]) {
+      expect(text).toMatch(/X alternatives|alternatives to/i);
+      expect(text).toMatch(/Product Hunt|Indie Hackers|Reddit/);
+      expect(text).toMatch(/own (pricing )?page|vendor's domain/i);
+      expect(text).toMatch(/cheaper or closer-priced/);
+    }
+    expect(section).toMatch(/cannot be read as a different product/);
+  });
+
+  it("tells the writer to list named direct competitors and pick the closest substitute as the main rival", () => {
+    expect(ALTERNATIVES_WRITE_PROMPT).toBe("alternatives-write.v4");
+    const write = loadPrompt(ALTERNATIVES_WRITE_PROMPT);
+    expect(write).toMatch(/main rival/);
+    expect(write).toMatch(/closest direct substitute/);
+    expect(write).toMatch(/Every credible named direct competitor/);
+    expect(write).toMatch(/does not support a price or weakness for product B/);
   });
 });

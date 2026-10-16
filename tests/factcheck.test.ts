@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addQuotes, applyFactcheck, assembleGap, claimRequest, collectClaims, gapChanged, requireQuote, runFactcheck, stricter, supportRate, type CheckResult } from "../lib/engine/factcheck";
+import { addQuotes, applyFactcheck, assembleGap, claimFigures, claimRelevant, claimRequest, collectClaims, figuresOverlap, gapChanged, requireQuote, rowProduct, runFactcheck, sharesTerm, stricter, supportRate, tokens, UNCONFIRMED_PRICE_METHOD, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageResult } from "../lib/engine/fetch";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
@@ -88,13 +88,36 @@ describe("applyFactcheck", () => {
 
   it("re-tags an unsupported figure as an estimate with its method", () => {
     const { section: out } = apply([result("alternatives[1].price", "unsupported", "estimate", "$50K+ a year", "Seat count × list price per seat")]);
-    expect(out.alternatives[1].price).toEqual({ text: "$50K+ a year", source: null, estimate: "Seat count × list price per seat" });
+    expect(out.alternatives[1].price).toEqual({ text: "Not public", source: null, estimate: "Seat count × list price per seat" });
   });
 
   it("turns a dropped price into \"Not public\" when the row still cites a source", () => {
     const { section: out, log } = apply([result("alternatives[0].price", "unsupported", "drop")]);
     expect(out.alternatives[0].price).toEqual(plain("Not public"));
     expect(log.find((l) => l.id === "alternatives[0].price")).toMatchObject({ action: "dropped", result: "Not public" });
+  });
+
+  it("logs when a claim was skipped without asking the model", () => {
+    const { log } = apply([{ ...result("alternatives[0].price", "unsupported", "drop"), skipped: true }]);
+    expect(log.find((l) => l.id === "alternatives[0].price")).toMatchObject({ skipped: true, action: "dropped" });
+  });
+
+  it("keeps a named rival when its price citation fails and the weakness is unsourced, as an estimate", () => {
+    // WorthBuild-shaped: the cited page is about a different product, so "Not public"
+    // would fail (the row has no sourced weakness) and used to delete the whole rival.
+    const draft = structuredClone(section);
+    draft.alternatives[1].weakness = [plain("Sourcing depth is not shown.")];
+    const claims = collectClaims(draft);
+    const { section: out, log } = applyFactcheck(
+      draft, claims,
+      claims.map((c) => (c.id === "alternatives[1].price" ? result(c.id, "unsupported", "drop") : result(c.id, "supported"))),
+      store,
+    );
+    expect(out.alternatives.map((a) => a.name)).toEqual(["Alts data platforms", "LP platforms", "Do it by hand"]);
+    expect(out.alternatives[1].price).toEqual({
+      text: "Not public", source: null, estimate: UNCONFIRMED_PRICE_METHOD,
+    });
+    expect(log.find((l) => l.id === "alternatives[1].price")).toMatchObject({ action: "estimated", result: UNCONFIRMED_PRICE_METHOD });
   });
 
   it("drops the whole row when its only cited weakness goes, and logs the row's other claims", () => {
@@ -303,5 +326,106 @@ describe("runFactcheck (Anthropic mocked)", () => {
     const r = await runFactcheck(section, store, { fetcher });
     expect(r.section.market_gap).toEqual([found("No reconciliation-only tool exists.", "S3"), plain("So a focused tool has room.")]);
     expect(r.run).toMatchObject({ prompt_version: "factcheck.v3+factcheck-gap.v1", repairs: [{ field: "market_gap" }] });
+  });
+
+  it("does not ask the model when the excerpt has none of the claim's figures", async () => {
+    const draft = structuredClone(section);
+    draft.alternatives[0].price = found("100K members", "S1");
+    respond(() => ({ verdict: "supported" }));
+    fetcher.mockResolvedValue({ ok: true, text: "Canoe pricing is sales-led. Nothing about members." });
+    const r = await runFactcheck(draft, store, { fetcher });
+    const price = r.log.find((l) => l.id === "alternatives[0].price");
+    expect(price).toMatchObject({ verdict: "unsupported", action: "dropped", result: "Not public", skipped: true });
+    expect(r.section.alternatives[0].price).toEqual(plain("Not public"));
+    expect(parse.mock.calls.some((c) => JSON.stringify(c[0].messages).includes("100K members"))).toBe(false);
+  });
+});
+
+describe("claimRelevant", () => {
+  const s = (title: string, url: string, excerpt: string) => ({ title, url, excerpt });
+
+  it("reads figures and treats indiehackers as sharing a term with indie-hacker", () => {
+    expect(claimFigures("100K Members, 2.9% + 30¢")).toEqual([
+      { n: 0.3, kind: "num" }, { n: 100_000, kind: "num" }, { n: 2.9, kind: "pct" },
+    ]);
+    expect(sharesTerm(tokens("indiehackers"), tokens("indie-hacker-business-statistics"))).toBe(true);
+    expect(rowProduct(`Alternatives row "LP platforms" (Allvue): its price`)).toBe("Allvue");
+    expect(rowProduct(`Alternatives row "WorthBuild": its price`)).toBe("WorthBuild");
+    expect(rowProduct(`Alternatives row "Do it by hand": its weakness`)).toBeUndefined();
+  });
+
+  it("treats K/M, commas, percent, cents and number words as the same figure", () => {
+    expect(figuresOverlap("$1.2M ARR", "Revenue of 1,200,000 last year")).toBe(true);
+    expect(figuresOverlap("$1.2M", "$1.2 million")).toBe(true);
+    expect(figuresOverlap("100K members", "100,000 members")).toBe(true);
+    expect(figuresOverlap("$50K–$500K a year", "Plans from $50,000")).toBe(true);
+    expect(figuresOverlap("2.9% + 30¢", "2.9% plus $0.30")).toBe(true);
+    expect(figuresOverlap("3%", "3 percent")).toBe(true);
+    expect(figuresOverlap("5-10 hours", "five to ten hours")).toBe(true);
+  });
+
+  it("keeps a format-variant claim relevant against excerpt and page text", () => {
+    const src = s("Pricing", "https://example.com/pricing", "List price is $1.2 million a year.");
+    expect(claimRelevant("$1.2M a year", src, `Alternatives row "Allvue": its price`)).toBe("relevant");
+    expect(claimRelevant("100K members", src, "Demand evidence", "The forum has 100,000 members.")).toBe("relevant");
+    expect(claimRelevant("30¢ per charge", s("Fees", "https://example.com/fees", "A $0.30 fee applies."), "Economics")).toBe("relevant");
+  });
+
+  it("falls through to the model when figures miss but the page has numbers of its own", () => {
+    expect(claimRelevant(
+      "$1.2M a year",
+      s("Pricing", "https://example.com/pricing", "Enterprise plans start at $80,000."),
+      "Economics unit cost note",
+    )).toBe("unsure");
+  });
+
+  it("rejects a 100K forum claim whose excerpt is about something else", () => {
+    expect(claimRelevant(
+      "100K Members on r/indiehackers",
+      s("Women Entrepreneur Ecommerce Statistics", "https://example.com/indie-hacker-business-statistics", "Women-owned ecommerce businesses grew last year."),
+      `Demand evidence, signal "Forum members" (forum): the figure 100K and what it counts`,
+    )).toBe("skip");
+  });
+
+  it("rejects WorthBuild's price against DimeADozen's $9 page", () => {
+    expect(claimRelevant(
+      "$5",
+      s("DimeADozen pricing", "https://dimeadozen.ai/pricing", "Plans start at $9 a report."),
+      `Alternatives row "WorthBuild" (worthbuild.com): its price`,
+    )).toBe("skip");
+  });
+
+  it("does not skip a short product name that produced no tokens", () => {
+    expect(tokens("Wix")).toEqual([]);
+    expect(tokens("Box")).toEqual([]);
+    expect(claimRelevant(
+      "Free plan",
+      s("Site builders compared", "https://example.com/builders", "Website builders charge monthly."),
+      `Alternatives row "Wix": its price`,
+    )).toBe("unsure");
+    expect(claimRelevant(
+      "Per-user pricing",
+      s("Cloud storage", "https://example.com/storage", "Cloud storage for teams."),
+      `Alternatives row "Box": its price`,
+    )).toBe("unsure");
+  });
+
+  it("matches Agencies/agency, Directories/directory and validation/validating by stem", () => {
+    expect(sharesTerm(tokens("Agencies"), tokens("agency partners"))).toBe(true);
+    expect(sharesTerm(tokens("Directories"), tokens("local directory listing"))).toBe(true);
+    expect(sharesTerm(tokens("validation"), tokens("validating the idea"))).toBe(true);
+    expect(claimRelevant(
+      "Slow for agencies",
+      s("Agency directory", "https://example.com/agency", "A directory for validating agency leads."),
+      `Alternatives row "Agencies": its weakness`,
+    )).toBe("relevant");
+  });
+
+  it("keeps a card-fee claim whose excerpt has the rate even under an unrelated title", () => {
+    expect(claimRelevant(
+      "2.9% + 30¢",
+      s("How we validate SaaS pricing pages", "https://preuve.ai/blog/fees", "The standard US rate is 2.9% + 30¢ per successful card charge."),
+      `Economics unit cost note`,
+    )).toBe("relevant");
   });
 });

@@ -7,7 +7,7 @@ import "@/styles/admin.css";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Admin — Teardown",
+  title: "Admin — Tearitdown",
   robots: { index: false },
 };
 
@@ -75,7 +75,7 @@ function Dashboard({ data }: { data: DashboardData }) {
   const { sales, waitlist, runs, traffic } = data;
   return (
     <>
-      <header><div className="wrap"><a href="/">Teardown</a><span>Admin</span></div></header>
+      <header><div className="wrap"><a href="/">Tearitdown</a><span>Admin</span></div></header>
       <main><div className="wrap">
         <p className="eyebrow">Admin</p>
         <h1>How the business is doing.</h1>
@@ -231,7 +231,7 @@ function Dashboard({ data }: { data: DashboardData }) {
           </div>
         </section>
       </div></main>
-      <footer><div className="wrap"><span>© 2026 Teardown</span><a href="/">Home</a><a href="/new">New</a></div></footer>
+      <footer><div className="wrap"><span>© 2026 Tearitdown</span><a href="/">Home</a><a href="/new">New</a></div></footer>
     </>
   );
 }

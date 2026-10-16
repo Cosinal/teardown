@@ -353,7 +353,7 @@ describe("section writers", () => {
 describe("writer prompts", () => {
   it("tell every section writer the hard character limits", () => {
     for (const name of [
-      "writer-shared.v1", "blockers-write.v1", "demand-write.v1", "economics-write.v2", "alternatives-write.v3",
+      "writer-shared.v2", "blockers-write.v1", "demand-write.v1", "economics-write.v2", "alternatives-write.v4",
       "distribution-write.v1", "idea-write.v1", "tests-write.v1", "verdict-write.v1", "assumptions-write.v1",
     ]) {
       expect(loadPrompt(name), name).toMatch(/character limits are hard|hard limits/i);
@@ -363,9 +363,11 @@ describe("writer prompts", () => {
     expect(loadPrompt("idea-write.v1")).toContain("at most 64 characters");
     expect(loadPrompt("tests-write.v1")).toContain("at most 64 characters");
     expect(loadPrompt("verdict-write.v1")).toContain("at most 160 characters");
-    expect(loadPrompt("writer-shared.v1")).toMatch(/stay a few characters under|ten percent under/i);
-    expect(loadPrompt("writer-shared.v1")).toMatch(/Never drop a cited fact or a figure/i);
-    expect(loadPrompt("writer-shared.v1")).toMatch(/unsourced figure must still be tagged Estimated/i);
+    expect(loadPrompt("writer-shared.v2")).toMatch(/stay a few characters under|ten percent under/i);
+    expect(loadPrompt("writer-shared.v2")).toMatch(/Never drop a cited fact or a figure/i);
+    expect(loadPrompt("writer-shared.v2")).toMatch(/unsourced figure must still be tagged Estimated/i);
+    expect(loadPrompt("writer-shared.v2")).toMatch(/Never put a source id/i);
+    expect(loadPrompt("writer-shared.v2")).toMatch(/same company, product, fee, or host/i);
   });
 });
 
