@@ -10,7 +10,7 @@ import type { IdeaSection } from "./sections/idea";
 import { testsReport, type TestsSection } from "./sections/tests";
 import type { VerdictSection } from "./sections/verdict";
 import { PRICE_NOT_PUBLIC, type Alternative, type Claim, type DemandSignal, type Figure, type Rich, type ScoreEntry, type Source, type TeardownReport, type Working } from "./types";
-import { LIMITS, ReportError, parsePartialReport, parseReport, type PartialReport } from "./validate";
+import { LIMITS, ReportError, parsePartialReport, parseReport, stripStoreIds, type PartialReport } from "./validate";
 
 // Turns section drafts, which cite SourceStore ids ("S12") or estimate
 // methods, into a TeardownReport, which cites 1-based indices into its own
@@ -58,10 +58,44 @@ export function isNotPublic(p: Part): boolean {
   return !p.source && !p.estimate && p.text.trim().toLowerCase() === PRICE_NOT_PUBLIC.toLowerCase();
 }
 
-/** A found source's line on the sources page: the page title, cut to fit. */
-export function sourceText(s: StoreSource): string {
-  const t = s.title.trim() || s.url;
+/** Hostname for a source label, without a leading www. */
+export function hostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+const SOURCE_STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "their", "its", "are", "not", "but", "per", "year", "month", "a", "an", "of", "in", "on", "to", "or"]);
+
+/** Content words from a title or excerpt, for telling whether they describe the same thing. */
+export function contentWords(s: string): Set<string> {
+  return new Set((s.toLowerCase().match(/[a-z][a-z0-9]{2,}/g) ?? []).filter((w) => !SOURCE_STOP.has(w)));
+}
+
+function clipSource(s: string): string {
+  const t = s.trim();
   return t.length > SOURCE_TEXT_MAX ? `${t.slice(0, SOURCE_TEXT_MAX - 1)}…` : t;
+}
+
+/**
+ * A found source's line on the sources page. Usually the page title, cut to
+ * fit. When the title and the quoted excerpt share no content words, the
+ * excerpt is long enough to stand alone, and it names a price or rate, the
+ * label is the host plus that excerpt so a Stripe-titled row that quoted
+ * Vercel (or the reverse) is not labelled as the wrong company.
+ */
+export function sourceText(s: StoreSource): string {
+  const title = s.title.trim() || s.url;
+  const excerpt = s.excerpt.replace(/\s+/g, " ").trim();
+  const titleWords = contentWords(title);
+  const excerptWords = contentWords(excerpt);
+  const overlap = [...excerptWords].some((w) => titleWords.has(w));
+  if (!overlap && excerpt.length >= 24 && /[$%¢]/.test(excerpt)) {
+    return clipSource(`${hostLabel(s.url)} — ${excerpt}`);
+  }
+  return clipSource(title);
 }
 
 /** The report fields for the drafts given, unvalidated. */
@@ -76,18 +110,25 @@ function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date
     return index.get(key)!;
   };
 
+  const displayed = (text: string, path: string): string => {
+    const next = stripStoreIds(text);
+    if (!next) throw new ReportError(`${path}: text empty after removing source ids`);
+    return next;
+  };
+
   const part = (p: Part, path: string): string | Claim => {
     if (p.source) {
       const s = byId.get(p.source);
       if (!s) throw new ReportError(`${path}: unknown source id ${p.source}`);
       if (s.retrieved_at > retrieved) retrieved = s.retrieved_at;
-      return { text: p.text, basis: "found", source: add(s.id, () => ({ basis: "found", text: sourceText(s), url: s.url })) };
+      return { text: displayed(p.text, path), basis: "found", source: add(s.id, () => ({ basis: "found", text: sourceText(s), url: s.url })) };
     }
     if (p.estimate) {
-      const method = p.estimate.trim();
-      return { text: p.text, basis: "estimated", source: add(`estimate:${method}`, () => ({ basis: "estimated", text: `Estimate. ${method}` })) };
+      const method = stripStoreIds(p.estimate);
+      if (!method) throw new ReportError(`${path}: estimate method empty after removing source ids`);
+      return { text: displayed(p.text, path), basis: "estimated", source: add(`estimate:${method}`, () => ({ basis: "estimated", text: `Estimate. ${method}` })) };
     }
-    return p.text;
+    return displayed(p.text, path);
   };
 
   const claim = (p: Part, path: string): Claim => {
@@ -165,13 +206,40 @@ function assemble(drafts: Partial<Drafts>, store: SourceStore, { date = new Date
     out.page_summaries = page_summaries;
   }
 
-  return {
+  const assembled: Record<string, unknown> = {
     ...out,
     date,
     sources_retrieved: retrieved ? retrieved.slice(0, 10) : date,
     ...(Object.keys(scores).length && { scorecard: scores }),
     sources,
   };
+  sanitizeAssembled(assembled);
+  return assembled;
+}
+
+/** Strips leftover SourceStore ids from display strings. Found page titles may mention S3. */
+function sanitizeAssembled(report: Record<string, unknown>): void {
+  const walk = (v: unknown, path: string): unknown => {
+    if (typeof v === "string") {
+      const next = stripStoreIds(v);
+      return next || v;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((x, i) => {
+        v[i] = walk(x, `${path}[${i}]`);
+      });
+      return v;
+    }
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      for (const [k, val] of Object.entries(o)) {
+        if (/^sources\[\d+\]$/.test(path) && (k === "text" || k === "url") && o.basis === "found") continue;
+        o[k] = walk(val, path ? `${path}.${k}` : k);
+      }
+    }
+    return v;
+  };
+  walk(report, "");
 }
 
 /**

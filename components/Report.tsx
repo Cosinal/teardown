@@ -73,7 +73,7 @@ function Sheet({ n, report, cover, footnote, children }: { n: number; report: Te
   return (
     <div className="td-sheet">
       <header className="td-head">
-        <div className="td-brand">teardown</div>
+        <div className="td-brand">Tearitdown</div>
         <div className="td-subject">{report.idea.name}</div>
         <div className="td-date">{formatDate(report.date)}</div>
       </header>
@@ -119,7 +119,7 @@ function VerdictPage({ r, label }: { r: TeardownReport; label?: string }) {
   return (
     <Sheet n={1} report={r} cover>
       <div>
-        <div className="td-eyebrow">Idea teardown{label && ` · ${label}`}</div>
+        <div className="td-eyebrow">Tearitdown{label && ` · ${label}`}</div>
         <h1 className="td-title">{r.idea.headline}</h1>
       </div>
 

@@ -30,6 +30,30 @@ export function overLen(path: string, length: number, max: number): string {
 
 export class ReportError extends Error {}
 
+/** SourceStore ids ("S12", "S19") must not appear in text the reader sees. */
+export const STORE_ID_RE = /\bS\d+\b/;
+
+export function hasStoreId(text: string): boolean {
+  return STORE_ID_RE.test(text);
+}
+
+/** Tells a writer to cite via `source` instead of putting the id in prose. */
+export function rejectStoreId(text: string, path: string): void {
+  const m = text.match(STORE_ID_RE);
+  if (m) throw new Error(`${path}: do not put source ids such as ${m[0]} in displayed text or the estimate method; cite with the source field`);
+}
+
+/** Drops parenthetical or bare store ids, e.g. "(S19 median rate)" → "median rate". */
+export function stripStoreIds(text: string): string {
+  return text
+    .replace(/\(\s*S\d+(?:\s+([^)]*))?\)/g, (_m, rest: string | undefined) => rest?.trim() ?? "")
+    .replace(/\[\s*S\d+(?:\s+([^\]]*))?\]/g, (_m, rest: string | undefined) => rest?.trim() ?? "")
+    .replace(/\bS\d+\b/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ \./g, ".")
+    .trim();
+}
+
 type Obj = Record<string, unknown>;
 
 function fail(path: string, msg: string): never {
@@ -285,7 +309,37 @@ function parseFields(input: unknown, complete: boolean): PartialReport {
       };
     });
   }
+  guardStoreIds(out);
   return out;
+}
+
+/** Found web titles may mention S3 or similar; everywhere else a store id is a leak. */
+function guardStoreIds(report: PartialReport): void {
+  const walk = (v: unknown, path: string) => {
+    if (typeof v === "string") {
+      if (hasStoreId(v)) fail(path, `contains a source id (${v.match(STORE_ID_RE)![0]}); numbered citations belong in source, not in the text`);
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((x, i) => walk(x, `${path}[${i}]`));
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const [k, val] of Object.entries(v as Obj)) {
+        if (path === "sources" && (k === "text" || k === "url") && (v as Obj).basis === "found") continue;
+        walk(val, path ? `${path}.${k}` : k);
+      }
+    }
+  };
+  for (const [k, val] of Object.entries(report)) {
+    if (k === "sources") {
+      report.sources.forEach((s, i) => {
+        if (s.basis === "estimated") walk(s.text, `sources[${i}].text`);
+      });
+      continue;
+    }
+    walk(val, k);
+  }
 }
 
 function isoDate(v: unknown, path: string): string {

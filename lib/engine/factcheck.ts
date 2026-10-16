@@ -34,6 +34,98 @@ const SCORECARD_METHOD = "Our summary of the alternatives listed in this section
 /** Used when a named competitor's price isn't confirmed: keep the row, don't drop it. */
 export const UNCONFIRMED_PRICE_METHOD = "Price as written; the cited page did not confirm it";
 
+const RELEVANCE_STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "their", "its", "are", "not", "but", "per", "year", "month", "only", "than", "into", "about", "what", "does", "cost", "price"]);
+
+/** Figures in a claim, normalised ($50K, 2.9%, 30¢ → 50k / 2.9% / 30). */
+export function claimFigures(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(¢|[KkMm](?![A-Za-z])|%)?/g)) {
+    const n = m[1].replace(/,/g, "");
+    const unit = m[2] === "¢" ? "" : (m[2] ?? "").toLowerCase();
+    out.push(`${n}${unit}`);
+  }
+  return [...new Set(out)];
+}
+
+function figureIn(fig: string, evidence: string): boolean {
+  const ev = evidence.toLowerCase().replace(/,/g, "");
+  const escaped = fig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\d.])${escaped}(?![\\d])`, "i").test(ev);
+}
+
+/** Words of at least 4 letters, minus stopwords. */
+export function tokens(text: string): string[] {
+  return [...new Set((text.toLowerCase().match(/[a-z][a-z0-9]{3,}/g) ?? []).filter((w) => !RELEVANCE_STOP.has(w)))];
+}
+
+/** True when any token of `a` is a substring of any token of `b`, or the reverse (indiehackers vs indie). */
+export function sharesTerm(a: string[], b: string[]): boolean {
+  if (!a.length || !b.length) return false;
+  return a.some((x) => b.some((y) => x.includes(y) || y.includes(x)));
+}
+
+/**
+ * The product a claim is about, from Alternatives / Distribution context.
+ * Prefers a parenthetical example ("Canoe") over a group label ("LP platforms").
+ */
+export function rowProduct(context: string): string | undefined {
+  const m = context.match(/^(?:Alternatives row|Distribution channel) "([^"]+)"(?: \(([^)]+)\))?/);
+  if (!m) return undefined;
+  const example = m[2]?.trim();
+  if (example) return example.split(",")[0]!.trim();
+  const name = m[1]!.trim();
+  return /\s/.test(name) ? undefined : name;
+}
+
+function evidenceText(source: Pick<Source, "title" | "url" | "excerpt">, pageText?: string): string {
+  return [source.title, source.url, source.excerpt, pageText ?? ""].join("\n");
+}
+
+/**
+ * Cheap check that the cited page is about this claim, before asking the model.
+ * A claim whose figures never appear, or whose product name never appears, is
+ * unsupported without a Haiku call. Figures that do appear bypass the product
+ * check (a card-fee excerpt may sit under an unrelated title).
+ */
+export function claimRelevant(
+  claim: string,
+  source: Pick<Source, "title" | "url" | "excerpt">,
+  context = "",
+  pageText?: string,
+): boolean {
+  const evidence = evidenceText(source, pageText);
+  const figs = claimFigures(claim);
+  const figHit = figs.some((f) => figureIn(f, evidence));
+  if (figs.length && !figHit) return false;
+  if (figHit) return true;
+
+  const product = rowProduct(context);
+  if (product && !sharesTerm(tokens(product), tokens(evidence))) return false;
+
+  if (/^Demand evidence/.test(context)) {
+    const long = tokens(claim).filter((t) => t.length >= 5);
+    const surface = `${source.title} ${source.url} ${source.excerpt}`;
+    if (long.length && !sharesTerm(long, tokens(surface))) return false;
+  }
+  return true;
+}
+
+function irrelevantResult(id: string, basis: "excerpt" | "page", excerptVerdict: Verdict = "unsupported"): CheckResult {
+  return {
+    id,
+    verdict: "unsupported",
+    reason: basis === "page"
+      ? "The cited page does not mention this claim's figures or subject."
+      : "The cited page's title, URL and excerpt do not mention this claim's figures or subject.",
+    action: "drop",
+    text: null,
+    method: null,
+    quote: null,
+    basis,
+    excerpt_verdict: excerptVerdict,
+  };
+}
+
 export interface CheckClaim {
   /** Where the claim sits, e.g. "alternatives[2].price". */
   id: string;
@@ -497,15 +589,29 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
   };
 
   const excerptCheck = async (c: CheckClaim): Promise<CheckResult> => {
+    const source = byId.get(c.source);
+    if (source && !claimRelevant(c.text, source, c.context)) return irrelevantResult(c.id, "excerpt");
     const { r } = await ask(c, "excerpt");
     return { id: c.id, ...r, quote: null, basis: "excerpt" as const, excerpt_verdict: r.verdict };
   };
-  // The first call alone writes the cached prompt; parallel calls before it
-  // finishes would each write it too. The rest then read it.
-  const excerptResults: CheckResult[] = [
-    await excerptCheck(claims[0]),
-    ...await mapLimit(claims.slice(1), CONCURRENCY, excerptCheck),
-  ];
+  // The first model call alone writes the cached prompt; skip claims the
+  // excerpt can't support so we don't spend a Haiku call on them, but still
+  // warm the cache with the first claim that will actually be judged.
+  const excerptResults: CheckResult[] = new Array(claims.length);
+  const firstJudge = claims.findIndex((c) => {
+    const s = byId.get(c.source);
+    return !s || claimRelevant(c.text, s, c.context);
+  });
+  if (firstJudge < 0) {
+    for (let i = 0; i < claims.length; i++) excerptResults[i] = await excerptCheck(claims[i]);
+  } else {
+    excerptResults[firstJudge] = await excerptCheck(claims[firstJudge]);
+    const rest = claims.map((_, i) => i).filter((i) => i !== firstJudge);
+    const restResults = await mapLimit(rest, CONCURRENCY, (i) => excerptCheck(claims[i]));
+    rest.forEach((i, j) => {
+      excerptResults[i] = restResults[j];
+    });
+  }
 
   const load = pageLoader(options.pages ?? memoryPageCache(), options.fetcher ?? fetchPage);
   const pages: NonNullable<StageRun["pages"]> = [];
@@ -527,6 +633,10 @@ export async function checkClaimList(claims: CheckClaim[], store: SourceStore, o
       return { ...stricter(first, { id: c.id, ...r, quote: null }), basis: "excerpt", excerpt_verdict: first.verdict, fetch_error: loaded.page.error };
     }
     const window = pageWindow(loaded.page.text, { claim: c.text, excerpt: source?.excerpt ?? "", context: c.context });
+    // Excerpt was not about this claim: only judge the page if it is.
+    if (source && !claimRelevant(c.text, source, c.context) && !claimRelevant(c.text, source, c.context, window)) {
+      return irrelevantResult(c.id, "page", first.verdict);
+    }
     const evidence = `${window}\n${source?.excerpt ?? ""}`;
     const once = async () => requireQuote((await ask(c, "recheck", window)).r, evidence);
     let r = await once();

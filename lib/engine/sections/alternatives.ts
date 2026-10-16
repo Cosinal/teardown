@@ -4,7 +4,7 @@ import { STAGE_MODELS, loadPrompt } from "../llm";
 import { SOURCE_BUDGETS, buildPartialReport, isNotPublic } from "../report";
 import type { SourceStore } from "../research";
 import { PRICE_NOT_PUBLIC } from "../types";
-import { overLen } from "../validate";
+import { overLen, rejectStoreId } from "../validate";
 import { runSectionResearch, runWriter } from "./common";
 import { SECTIONS } from "./config";
 
@@ -54,13 +54,15 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
   const ids = new Set(store.map((s) => s.id));
   const cited = new Set<string>();
 
-  const check = (p: { source: string | null; estimate: string | null }, path: string) => {
+  const check = (p: { text?: string; source: string | null; estimate: string | null }, path: string) => {
+    if (p.text) rejectStoreId(p.text, `${path}.text`);
     if (p.source && p.estimate) throw new Error(`${path}: give a source id or an estimate method, not both`);
     if (p.source) {
       if (!ids.has(p.source)) throw new Error(`${path}: ${p.source} is not in the source list`);
       cited.add(p.source);
     }
     if (p.estimate) {
+      rejectStoreId(p.estimate, `${path}.estimate`);
       if (p.estimate.trim().length > ESTIMATE_MAX) throw new Error(overLen(`${path}.estimate`, p.estimate.trim().length, ESTIMATE_MAX));
       cited.add(`estimate:${p.estimate.trim()}`);
     }
@@ -78,6 +80,7 @@ export function parseAlternatives(raw: unknown, store: SourceStore, maxSources =
     a.weakness.forEach((w, j) => check(w, `${path}.weakness[${j}]`));
   });
   section.market_gap.forEach((m, i) => check(m, `market_gap[${i}]`));
+  rejectStoreId(section.scorecard.finding, "scorecard.finding");
   check(section.scorecard, "scorecard");
 
   if (section.alternatives.filter((a) => a.workaround).length > 1) throw new Error("alternatives: at most one workaround row");

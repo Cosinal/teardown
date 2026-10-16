@@ -13,7 +13,7 @@ import {
 // (measured 2026-10-12: ~11k tokens rewritten per schema; no schema, read from
 // cache). Our own parsers validate the JSON instead, with one retry.
 
-export const WRITER_SHARED_PROMPT = "writer-shared.v1";
+export const WRITER_SHARED_PROMPT = "writer-shared.v2";
 
 /**
  * Fixed for every writer. Model, effort and thinking settings are part of the

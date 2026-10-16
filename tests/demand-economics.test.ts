@@ -57,6 +57,12 @@ describe("parseDemand", () => {
     expect(() => parseDemand(d, store)).toThrow(/must cite the source/);
   });
 
+  it("rejects a store id in the detail text", () => {
+    const d = structuredClone(demand);
+    d.signals[0].detail = found("Halifax searches a month (S19)", "S1");
+    expect(() => parseDemand(d, store)).toThrow(/do not put source ids/);
+  });
+
   it("requires thin evidence below two signals, rated weak and said plainly", () => {
     const one = { ...structuredClone(demand), signals: [demand.signals[0]] };
     expect(() => parseDemand(one, store)).toThrow(/"thin"/);
@@ -138,6 +144,12 @@ describe("parseEconomics", () => {
     const e = structuredClone(econ);
     e.unit_cost.note[1] = plain("+ $20 supplies");
     expect(() => parseEconomics(e, store)).toThrow(/every figure must cite/);
+  });
+
+  it("rejects a store id in a note or estimate method", () => {
+    const e = structuredClone(econ);
+    e.unit_cost.note[1] = est("+ $20 supplies and fuel", "(S19 median rate) for fuel");
+    expect(() => parseEconomics(e, store)).toThrow(/do not put source ids/);
   });
 
   it("rejects a note with nothing tagged, a bad currency and figures in the finding", () => {

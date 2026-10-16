@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addQuotes, applyFactcheck, assembleGap, claimRequest, collectClaims, gapChanged, requireQuote, runFactcheck, stricter, supportRate, UNCONFIRMED_PRICE_METHOD, type CheckResult } from "../lib/engine/factcheck";
+import { addQuotes, applyFactcheck, assembleGap, claimFigures, claimRelevant, claimRequest, collectClaims, gapChanged, requireQuote, rowProduct, runFactcheck, sharesTerm, stricter, supportRate, tokens, UNCONFIRMED_PRICE_METHOD, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageResult } from "../lib/engine/fetch";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
@@ -321,5 +321,53 @@ describe("runFactcheck (Anthropic mocked)", () => {
     const r = await runFactcheck(section, store, { fetcher });
     expect(r.section.market_gap).toEqual([found("No reconciliation-only tool exists.", "S3"), plain("So a focused tool has room.")]);
     expect(r.run).toMatchObject({ prompt_version: "factcheck.v3+factcheck-gap.v1", repairs: [{ field: "market_gap" }] });
+  });
+
+  it("does not ask the model when the excerpt has none of the claim's figures", async () => {
+    const draft = structuredClone(section);
+    draft.alternatives[0].price = found("100K members", "S1");
+    respond(() => ({ verdict: "supported" }));
+    fetcher.mockResolvedValue({ ok: true, text: "Canoe pricing is sales-led. Nothing about members." });
+    const r = await runFactcheck(draft, store, { fetcher });
+    const price = r.log.find((l) => l.id === "alternatives[0].price");
+    expect(price).toMatchObject({ verdict: "unsupported", action: "dropped", result: "Not public" });
+    expect(r.section.alternatives[0].price).toEqual(plain("Not public"));
+    expect(parse.mock.calls.some((c) => JSON.stringify(c[0].messages).includes("100K members"))).toBe(false);
+  });
+});
+
+describe("claimRelevant", () => {
+  const s = (title: string, url: string, excerpt: string) => ({ title, url, excerpt });
+
+  it("reads figures and treats indiehackers as sharing a term with indie-hacker", () => {
+    expect(claimFigures("100K Members, 2.9% + 30¢")).toEqual(["100k", "2.9%", "30"]);
+    expect(sharesTerm(tokens("indiehackers"), tokens("indie-hacker-business-statistics"))).toBe(true);
+    expect(rowProduct(`Alternatives row "LP platforms" (Allvue): its price`)).toBe("Allvue");
+    expect(rowProduct(`Alternatives row "WorthBuild": its price`)).toBe("WorthBuild");
+    expect(rowProduct(`Alternatives row "Do it by hand": its weakness`)).toBeUndefined();
+  });
+
+  it("rejects a 100K forum claim whose excerpt is about something else", () => {
+    expect(claimRelevant(
+      "100K Members on r/indiehackers",
+      s("Women Entrepreneur Ecommerce Statistics", "https://example.com/indie-hacker-business-statistics", "Women-owned ecommerce businesses grew last year."),
+      `Demand evidence, signal "Forum members" (forum): the figure 100K and what it counts`,
+    )).toBe(false);
+  });
+
+  it("rejects WorthBuild's price against DimeADozen's $9 page", () => {
+    expect(claimRelevant(
+      "$5",
+      s("DimeADozen pricing", "https://dimeadozen.ai/pricing", "Plans start at $9 a report."),
+      `Alternatives row "WorthBuild" (worthbuild.com): its price`,
+    )).toBe(false);
+  });
+
+  it("keeps a card-fee claim whose excerpt has the rate even under an unrelated title", () => {
+    expect(claimRelevant(
+      "2.9% + 30¢",
+      s("How we validate SaaS pricing pages", "https://preuve.ai/blog/fees", "The standard US rate is 2.9% + 30¢ per successful card charge."),
+      `Economics unit cost note`,
+    )).toBe(true);
   });
 });

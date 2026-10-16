@@ -119,6 +119,15 @@ describe("parseAlternatives", () => {
     expect(() => parseAlternatives(both, store)).toThrow(/not both/);
   });
 
+  it("rejects a store id left in displayed text or the estimate method", () => {
+    const leak = structuredClone(section);
+    leak.alternatives[1].price = est("2 to 4 hours", "(S19 median rate) of similar work");
+    expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
+    leak.alternatives[1].price = est("2 to 4 hours", "Analyst time per statement, from sample statements");
+    leak.alternatives[0].weakness[0] = found("Sold as a whole platform S27", "S27");
+    expect(() => parseAlternatives(leak, store)).toThrow(/do not put source ids/);
+  });
+
   it("applies the report's length limits, naming the field", () => {
     const long = { ...section, alternatives: [{ ...section.alternatives[0], name: "A name that is far too long for the page" }] };
     expect(() => parseAlternatives(long, store)).toThrow(/alternatives\[0\]\.name: \d+ characters, at most 26/);
@@ -229,7 +238,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(first).not.toHaveProperty("output_config.format");
     const retry = create.mock.calls[1][0].messages;
     expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: 100 characters, at most 56/);
-    expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v4" });
+    expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v2+alternatives-write.v4" });
     expect(r.run.usage.input_tokens).toBe(2000);
   });
 

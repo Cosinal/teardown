@@ -176,6 +176,9 @@ describe("distribution", () => {
     const uncosted = structuredClone(distribution);
     uncosted.channels[0].cac = { low: 5, high: 15, source: null, estimate: null };
     expect(() => parseDistribution(uncosted, ctx)).toThrow(/cac: cite the source/);
+    const leak = structuredClone(distribution);
+    leak.channels[0].cac = { ...leak.channels[0].cac, estimate: "Founder hours (S19) × wage" };
+    expect(() => parseDistribution(leak, ctx)).toThrow(/do not put source ids/);
   });
 
   it("re-tags an unconfirmed cost as rough instead of dropping it, and drops an unsupported reason's channel", () => {
@@ -202,6 +205,7 @@ describe("blockers", () => {
 
   it("needs a cited or estimated detail, and drops one its source doesn't support", () => {
     expect(() => parseBlockers({ ...blockers, blockers: [{ ...blockers.blockers[0], detail: plain("A licence.") }] }, ctx)).toThrow(/cite the source/);
+    expect(() => parseBlockers({ ...blockers, blockers: [{ ...blockers.blockers[0], detail: found("Halifax requires a licence (S4).", "S4") }] }, ctx)).toThrow(/do not put source ids/);
     const check = blockersCheck(ctx)(store);
     const { section } = applyChecks(check, blockers, check.claims(blockers), [result("blockers[0]", "unsupported", "drop")]);
     expect(section.blockers).toEqual([]);
