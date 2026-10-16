@@ -12,6 +12,7 @@ This repo is the Next.js (App Router, TypeScript) app. The GitHub repo is `Cosin
 - **Neon Postgres** via `@neondatabase/serverless` (`lib/db.ts`). Schema is created and extended in `init()`: additive `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` only.
 - **Anthropic** Claude (intake, web-search research, section writers, fact-check). Billable.
 - **Stripe** Checkout: one-time payment per teardown (no subscription). Test-mode keys outside production.
+- **PDF export**: `puppeteer-core` + `@sparticuz/chromium` on `GET /t/[id]/pdf` (Node.js function, `maxDuration` 60). Same owner/admin gate as the report page.
 - Vercel Web Analytics and Speed Insights in `app/layout.tsx`.
 
 ## Local setup
@@ -77,6 +78,7 @@ Names only. Values live in `.env.local` or Vercel. Never commit `.env*` files; o
 | `/t/[id]` | The report, or a waiting/cooking page (refreshes every 15s) while there is no report. Only its owner cookie or the admin cookie can see it; everyone else gets a private page that points at the waitlist. |
 | `/t/sample` | Public design fixture of a finished report. No database. |
 | `/t/sample-waiting`, `/t/sample-error` | Public design fixtures for the waiting and failed layouts. |
+| `GET /t/[id]/pdf` | Letter-size PDF of a **finished** report. Same owner/admin (or public sample) check as `/t/[id]`. Missing, private, waiting, and failed ids 404. Filename `tearitdown-<idea-slug>.pdf`. |
 | `POST /api/stripe/webhook` | Stripe events, signature-checked. `checkout.session.completed` (and `async_payment_succeeded`) saves the payment intent, queues the teardown once, and starts the run. |
 | `GET /api/count` | `{ "count": n }`: signup total only. Polled every 4s by the home page. |
 | `POST /api/subscribe` | `{ email, consent: true, ref? }`. 400 for invalid email or missing consent, 409 for a duplicate. |
@@ -101,7 +103,7 @@ Unlock `/new` or `/admin` once with `?key=$ADMIN_KEY`. `proxy.ts` sets an httpOn
 - `styles/`: page-scoped CSS. `home.css` and `legal.css` are verbatim from the original waitlist site (Inter). `report.css` is the five-page readout and waiting card (IBM Plex). `new.css` and `admin.css` match the waitlist look. There is no global CSS; internal links are plain `<a>` so stylesheets never mix.
 - `public/fonts/`: self-hosted Inter and IBM Plex. Do not switch waitlist pages to `next/font` (it changes metrics).
 - `lib/db.ts`: Neon client and idempotent schema setup (`signups`, `teardowns`, `sources`, `events`).
-- `lib/admin.ts`, `lib/payments.ts`, `lib/stripe.ts`, `lib/events.ts`, `lib/waiting.ts`, `lib/admin-metrics.ts`: admin cookie, owner cookie and refunds, Stripe, first-party events, waiting copy, dashboard queries.
+- `lib/admin.ts`, `lib/payments.ts`, `lib/stripe.ts`, `lib/events.ts`, `lib/waiting.ts`, `lib/admin-metrics.ts`, `lib/teardown.ts`, `lib/pdf.ts`: admin cookie, owner cookie and refunds, Stripe, first-party events, waiting copy, dashboard queries, shared `/t/[id]` load/access, PDF HTML + Chromium render.
 - `lib/engine/`: the teardown pipeline. `runTeardown` / `runPipeline` produce a real `TeardownReport`. `startRun` (`lib/engine/run.ts`) is the app entry that runs a queued row (webhook, admin skip-payment, admin re-run).
 - `lib/engine/sections/`: one module per report section. `common.ts` is the shared writer (`runWriter`).
 - `lib/engine/prompts/`: versioned prompt files; the file name is the prompt version.
@@ -129,5 +131,7 @@ Deployed on Vercel. Set the env vars above on the project. Use Stripe **test** k
 Stripe webhook: point a Dashboard endpoint at `https://<host>/api/stripe/webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`. Preview deploys behind Vercel Deployment Protection will 401 Stripe’s POST unless you bypass protection for that URL.
 
 The engine runs in one Vercel function with `maxDuration = 300` (Hobby cap) on `/new`, `/t/[id]`, and the webhook. A run that fails after payment is refunded once.
+
+`GET /t/[id]/pdf` is a separate Node.js function (`maxDuration = 60`). It unpacks `@sparticuz/chromium` (~64MB brotli in the bundle) into `/tmp` on cold start, then prints the five letter sheets with `page.pdf` (`printBackground`, no header/footer). Expect a slower first download (Chromium inflate); warm invocations skip the extract. The function needs the default 1024MB+ memory.
 
 For local Checkout, `stripe listen --forward-to localhost:3000/api/stripe/webhook` and put that listener’s `whsec_…` in `.env.local`.

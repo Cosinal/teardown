@@ -482,9 +482,14 @@ function SourcesPage({ r }: { r: TeardownReport }) {
   );
 }
 
-export default function Report({ report, label }: { report: TeardownReport; label?: string }) {
+export default function Report({ report, label, pdfHref }: { report: TeardownReport; label?: string; pdfHref?: string }) {
   return (
     <div className="td-doc">
+      {pdfHref && (
+        <div className="td-toolbar">
+          <a className="td-btn" href={pdfHref}>Download PDF</a>
+        </div>
+      )}
       <VerdictPage r={report} label={label} />
       <MarketPage r={report} />
       <BusinessPage r={report} />

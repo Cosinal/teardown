@@ -397,6 +397,7 @@ describe("who can see a teardown", () => {
     const el = await render();
     expect(el.name).toBe("Report");
     expect(el.props.report).toEqual(SAMPLE_REPORT);
+    expect(el.props.pdfHref).toBe("/t/abc/pdf");
   });
 
   it("the admin cookie sees the report", async () => {
@@ -439,10 +440,13 @@ describe("who can see a teardown", () => {
     const el = await render();
     expect(el.name).toBe("Cooking");
     expect(el.props.t).toMatchObject({ status: "awaiting_payment" });
+    expect(el.props.pdfHref).toBeUndefined();
   });
 
   it("the sample stays public", async () => {
-    expect((await render("sample")).name).toBe("Report");
+    const el = await render("sample");
+    expect(el.name).toBe("Report");
+    expect(el.props.pdfHref).toBe("/t/sample/pdf");
   });
 
   it("the waiting and error design fixtures are public and skip the database", async () => {

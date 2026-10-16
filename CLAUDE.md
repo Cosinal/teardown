@@ -16,6 +16,7 @@ Payment is a **one-time** Stripe Checkout charge per teardown (`STRIPE_PRICE_ID`
 - Neon Postgres via `@neondatabase/serverless` (`lib/db.ts`).
 - Anthropic Claude for the engine. Stripe for Checkout and refunds.
 - Env (names only; see `.env.example`): `DATABASE_URL`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`. Use Stripe test keys outside production. Never commit secrets.
+- PDF of a finished report: `puppeteer-core` + `@sparticuz/chromium` in `GET /t/[id]/pdf` (`lib/pdf.ts`). Access is `canViewTeardown` in `lib/teardown.ts` — the same owner/admin check as the HTML page.
 
 ## Pipeline
 
@@ -60,10 +61,11 @@ All section writers must share one model and effort (currently Sonnet, `medium`)
 
 Neon table **`teardowns`**: `report` JSONB (nullable until `done`), `sections` JSONB (drafts keyed by name), `idea_spec`, `research_notes`, `stage_runs`, `cost_usd`, `status`, payment/owner columns. Table **`sources`**: one row per source per teardown.
 
-Access (`app/t/[id]/page.tsx`):
+Access (`lib/teardown.ts`, used by `app/t/[id]/page.tsx` and `app/t/[id]/pdf/route.ts`):
 
 - **`/t/sample`** (and `sample-waiting`, `sample-error`) are public design fixtures; they never touch the database.
 - Every other id is shown only to the **owner cookie** (`td_own_<id>`, hash on the row) or the **admin cookie** (`td_admin`). Everyone else gets the private page (waitlist CTA, “Tearitdown is building.”). No row data.
+- A finished report (status effectively `done`, i.e. a stored `report`) shows a **Download PDF** button linking to `/t/[id]/pdf`. Waiting, failed, and private pages do not. The PDF route 404s unless that same viewer would see the HTML report **and** a report exists (`/t/sample` included). Chromium prints five US Letter pages from `components/Report.tsx` + `styles/report.css`; filename `tearitdown-<idea-slug>.pdf`.
 
 `/api/teardown` still returns `SAMPLE_REPORT`. Do **not** call `runTeardown` from that public route.
 
