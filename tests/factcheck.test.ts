@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addQuotes, applyFactcheck, assembleGap, claimRequest, collectClaims, gapChanged, requireQuote, runFactcheck, stricter, supportRate, type CheckResult } from "../lib/engine/factcheck";
+import { addQuotes, applyFactcheck, assembleGap, claimRequest, collectClaims, gapChanged, requireQuote, runFactcheck, stricter, supportRate, UNCONFIRMED_PRICE_METHOD, type CheckResult } from "../lib/engine/factcheck";
 import { memoryPageCache, type PageResult } from "../lib/engine/fetch";
 import type { SourceStore } from "../lib/engine/research";
 import type { AlternativesSection } from "../lib/engine/sections/alternatives";
@@ -95,6 +95,24 @@ describe("applyFactcheck", () => {
     const { section: out, log } = apply([result("alternatives[0].price", "unsupported", "drop")]);
     expect(out.alternatives[0].price).toEqual(plain("Not public"));
     expect(log.find((l) => l.id === "alternatives[0].price")).toMatchObject({ action: "dropped", result: "Not public" });
+  });
+
+  it("keeps a named rival when its price citation fails and the weakness is unsourced, as an estimate", () => {
+    // WorthBuild-shaped: the cited page is about a different product, so "Not public"
+    // would fail (the row has no sourced weakness) and used to delete the whole rival.
+    const draft = structuredClone(section);
+    draft.alternatives[1].weakness = [plain("Sourcing depth is not shown.")];
+    const claims = collectClaims(draft);
+    const { section: out, log } = applyFactcheck(
+      draft, claims,
+      claims.map((c) => (c.id === "alternatives[1].price" ? result(c.id, "unsupported", "drop") : result(c.id, "supported"))),
+      store,
+    );
+    expect(out.alternatives.map((a) => a.name)).toEqual(["Alts data platforms", "LP platforms", "Do it by hand"]);
+    expect(out.alternatives[1].price).toEqual({
+      text: "$50K to $500K a year", source: null, estimate: UNCONFIRMED_PRICE_METHOD,
+    });
+    expect(log.find((l) => l.id === "alternatives[1].price")).toMatchObject({ action: "estimated", result: UNCONFIRMED_PRICE_METHOD });
   });
 
   it("drops the whole row when its only cited weakness goes, and logs the row's other claims", () => {

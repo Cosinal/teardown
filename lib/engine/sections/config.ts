@@ -9,6 +9,8 @@
 // in this order: Idea, Distribution and Blockers together, then Riskiest
 // Assumptions, then Next Tests, then Verdict (with the page summaries) last.
 
+// Search caps are a cost lever (web search is billed per call). Alternatives
+// coverage is improved by prompt versions, not by raising these numbers.
 export const SECTIONS = {
   alternatives: { searches: 6 },
   demand_evidence: { searches: 4 },

@@ -31,6 +31,8 @@ const CONCURRENCY = 8;
 const QUOTE_MAX = 400;
 /** Used when an unsupported scorecard citation can't be dropped or rewritten. */
 const SCORECARD_METHOD = "Our summary of the alternatives listed in this section";
+/** Used when a named competitor's price isn't confirmed: keep the row, don't drop it. */
+export const UNCONFIRMED_PRICE_METHOD = "Price as written; the cited page did not confirm it";
 
 export interface CheckClaim {
   /** Where the claim sits, e.g. "alternatives[2].price". */
@@ -160,7 +162,7 @@ function fix(section: AlternativesSection, loc: Location, action: FixHow, r: Che
   const method = r.method?.trim();
   const edit = (p: Part): Part | null => {
     if (action === "rewrite") return text ? { ...p, text } : null;
-    if (action === "estimate") return method ? { text: text || p.text, source: null, estimate: method } : null;
+    if (action === "estimate") return { text: text || p.text, source: null, estimate: method || UNCONFIRMED_PRICE_METHOD };
     return null;
   };
 
@@ -216,12 +218,15 @@ export function alternativesCheck(store: SourceStore, maxSources = SOURCE_BUDGET
       // The scorecard is never dropped: it falls back to an estimate.
       if (loc.kind === "scorecard" && how !== "rewrite") return { section: s, action: "estimated", result: s.scorecard.estimate ?? undefined };
       if (how === "drop") return { section: s, action: "dropped", ...(loc.kind === "price" && { result: PRICE_NOT_PUBLIC }) };
-      if (how === "estimate") return { section: s, action: "estimated", result: r.method ?? undefined };
+      if (how === "estimate") return { section: s, action: "estimated", result: r.method?.trim() || UNCONFIRMED_PRICE_METHOD };
       return { section: s, action: "rewritten", result: r.text ?? undefined };
     },
     fallbacks(id) {
       const loc = locate(id);
-      return loc.kind === "price" || loc.kind === "weakness" ? ["drop", "drop_row"] : ["drop"];
+      // A named product whose price citation fails must stay on the page: re-tag
+      // as an estimate (or "Not public") rather than deleting the rival.
+      if (loc.kind === "price") return ["estimate"];
+      return loc.kind === "weakness" ? ["drop", "drop_row"] : ["drop"];
     },
     rank(id) {
       const loc = locate(id);

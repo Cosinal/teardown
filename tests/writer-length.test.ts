@@ -353,7 +353,7 @@ describe("section writers", () => {
 describe("writer prompts", () => {
   it("tell every section writer the hard character limits", () => {
     for (const name of [
-      "writer-shared.v1", "blockers-write.v1", "demand-write.v1", "economics-write.v2", "alternatives-write.v3",
+      "writer-shared.v1", "blockers-write.v1", "demand-write.v1", "economics-write.v2", "alternatives-write.v4",
       "distribution-write.v1", "idea-write.v1", "tests-write.v1", "verdict-write.v1", "assumptions-write.v1",
     ]) {
       expect(loadPrompt(name), name).toMatch(/character limits are hard|hard limits/i);
