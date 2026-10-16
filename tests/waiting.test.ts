@@ -115,6 +115,7 @@ describe("waiting markup", () => {
     expect(markup.toLowerCase()).not.toMatch(/\bis live\b/);
     expect(markup).toContain('aria-current="step"');
     expect(markup).not.toContain("Re-run from saved answers");
+    expect(markup).not.toContain("Download PDF");
   });
 
   it("shows the admin re-run on a failed run and keeps the same action label", () => {
@@ -125,6 +126,7 @@ describe("waiting markup", () => {
     expect(markup).toContain("been refunded");
     expect(markup).not.toContain("About 2–5 minutes");
     expect(markup).not.toContain("Reading your idea");
+    expect(markup).not.toContain("Download PDF");
   });
 
   it("hides the error and re-run from anyone who is not admin", () => {
@@ -152,5 +154,6 @@ describe("waiting markup", () => {
     expect(markup).not.toContain("/new");
     expect(markup).not.toMatch(/\$\d/);
     expect(markup.toLowerCase()).not.toContain("live");
+    expect(markup).not.toContain("Download PDF");
   });
 });

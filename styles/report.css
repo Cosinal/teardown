@@ -14,6 +14,8 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
 
 /* Screen: sheets stacked on a board, as in the design canvas. */
 .td-doc{--accent:#1F3BB3;--accent-tint:rgb(239, 241, 250);padding:48px;display:flex;flex-direction:column;align-items:safe center;gap:48px}
+.td-toolbar{flex:none;display:flex;justify-content:center}
+.td-toolbar .td-btn{min-width:14rem}
 .td-sheet{flex:none;width: 816px; height: 1056px; box-sizing: border-box; padding: 36px 64px 30px; display: flex; flex-direction: column; background: #FFFFFF; color: #14161A; font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, sans-serif; font-size: 13px; line-height: 19px;box-shadow:0 1px 3px rgba(0,0,0,.12);overflow:hidden;overflow-wrap:break-word}
 
 /* Real table elements replace the design's sc-raw-* tags; neutralise UA defaults. */
@@ -220,6 +222,7 @@ body:has(.td-doc){margin:0;background:#f5f4ef}
   .td-doc{padding: 0; gap: 0; display: block}
   .td-sheet{box-shadow: none; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact}
   .td-sheet:last-child{break-after: auto}
+  .td-toolbar{display:none!important}
 }
 
 /* Waiting / private / error: a fluid card, same type as the report, sized for a phone first. */
