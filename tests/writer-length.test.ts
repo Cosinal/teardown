@@ -6,8 +6,8 @@ import type { AlternativesSection } from "../lib/engine/sections/alternatives";
 import type { AssumptionsSection } from "../lib/engine/sections/assumptions";
 import { parseBlockers, writeBlockers, type BlockersSection } from "../lib/engine/sections/blockers";
 import {
-  LENGTH_REPAIR_ATTEMPTS, TINY_OVERRUN_RATIO, WRITE_ATTEMPTS, WriterError, applyLengthOverrun,
-  figuresLost, isTinyOverrun, lengthOverrun, runWriter, stringAt, trimIsSafe, truncateAtWord,
+  LENGTH_REPAIR_ATTEMPTS, TRIM_OVERRUN_RATIO, WRITE_ATTEMPTS, WriterError, applyLengthOverrun,
+  figuresLost, isTrimmableOverrun, lengthOverrun, runWriter, stringAt, trimIsSafe, truncateAtWord,
 } from "../lib/engine/sections/common";
 import type { DemandSection } from "../lib/engine/sections/demand";
 import type { DistributionSection } from "../lib/engine/sections/distribution";
@@ -117,11 +117,12 @@ describe("length overrun helpers", () => {
     expect(lengthOverrun("cites 7 distinct sources; the limit is 5")).toBeNull();
   });
 
-  it("treats a 60-vs-56 finding as a tiny overrun, and refuses a trim that drops a figure", () => {
-    expect(TINY_OVERRUN_RATIO).toBe(0.15);
-    expect(isTinyOverrun(60, 56)).toBe(true);
-    expect(isTinyOverrun(66, 56)).toBe(false);
-    expect(isTinyOverrun(31, 30)).toBe(true);
+  it("treats a 60-vs-56 finding as a trimmable overrun, and refuses a trim that drops a figure", () => {
+    expect(TRIM_OVERRUN_RATIO).toBe(0.5);
+    expect(isTrimmableOverrun(60, 56)).toBe(true);
+    expect(isTrimmableOverrun(84, 56)).toBe(true);
+    expect(isTrimmableOverrun(85, 56)).toBe(false);
+    expect(isTrimmableOverrun(31, 30)).toBe(true);
     expect(figuresLost("A mobile visit at the owner's door for $80", "A mobile visit at the owner's…")).toBe(true);
     expect(figuresLost("A licence is needed first.", "A licence is needed…")).toBe(false);
     expect(trimIsSafe({ scorecard: { finding: FINDING_60 } }, { field: "scorecard.finding", max: 56, length: 60 })).toBe(true);
@@ -180,34 +181,94 @@ describe("runWriter length recovery", () => {
     ]);
   });
 
-  it("asks the writer to shorten a non-tiny overrun and records the repair cost", async () => {
-    const long = "x".repeat(80);
+  it("trims a finding at exactly +50% without a second call", async () => {
+    const at50 = "x".repeat(84);
+    create.mockResolvedValue(reply(JSON.stringify(draft(at50))));
+    const r = await write();
+    const finding = (r.value as { scorecard: { finding: string } }).scorecard.finding;
+    expect(finding.length).toBeLessThanOrEqual(56);
+    expect(finding.endsWith("…")).toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(r.run.repair_cost_usd).toBeUndefined();
+  });
+
+  it("asks the writer to shorten a +51% overrun and records the repair cost", async () => {
+    const long = "x".repeat(85);
     create.mockResolvedValueOnce(reply(JSON.stringify(draft(long)))).mockResolvedValueOnce(reply('{"scorecard.finding": "A licence is needed first."}'));
     const r = await write();
     expect(r.value).toEqual(draft("A licence is needed first."));
     expect(create).toHaveBeenCalledTimes(2);
     const ask = (create.mock.calls[1][0] as Params).messages.at(-1)!.content;
     expect(ask).toContain("hard limit of 56 characters");
-    expect(ask).toContain("it is 80 characters");
+    expect(ask).toContain("it is 85 characters");
     expect(ask).toContain("Rewrite only that field");
-    expect(r.run.retries).toEqual(["scorecard.finding: 80 characters, at most 56"]);
+    expect(r.run.retries).toEqual(["scorecard.finding: 85 characters, at most 56"]);
     expect(r.run.repair_cost_usd).toBeGreaterThan(0);
     expect(r.run.repair_cost_usd).toBeLessThanOrEqual(r.run.cost_usd);
   });
 
-  it("truncates a non-tiny finding after one repair and completes the run", async () => {
-    const long = "x".repeat(80);
+  it("asks the writer to shorten an overrun well over 50% and records the repair cost", async () => {
+    const long = "x".repeat(100);
+    create.mockResolvedValueOnce(reply(JSON.stringify(draft(long)))).mockResolvedValueOnce(reply('{"scorecard.finding": "A licence is needed first."}'));
+    const r = await write();
+    expect(r.value).toEqual(draft("A licence is needed first."));
+    expect(create).toHaveBeenCalledTimes(2);
+    const ask = (create.mock.calls[1][0] as Params).messages.at(-1)!.content;
+    expect(ask).toContain("hard limit of 56 characters");
+    expect(ask).toContain("it is 100 characters");
+    expect(ask).toContain("Rewrite only that field");
+    expect(r.run.retries).toEqual(["scorecard.finding: 100 characters, at most 56"]);
+    expect(r.run.repair_cost_usd).toBeGreaterThan(0);
+    expect(r.run.repair_cost_usd).toBeLessThanOrEqual(r.run.cost_usd);
+  });
+
+  it("truncates a finding over 50% after two repairs and completes the run", async () => {
+    const long = "x".repeat(100);
     create.mockResolvedValue(reply(JSON.stringify(draft(long))));
     const r = await write();
     const finding = (r.value as { scorecard: { finding: string } }).scorecard.finding;
     expect(finding.length).toBeLessThanOrEqual(56);
     expect(finding.endsWith("…")).toBe(true);
     expect(create).toHaveBeenCalledTimes(1 + LENGTH_REPAIR_ATTEMPTS);
+    expect(create).toHaveBeenCalledTimes(3);
     expect(r.run.repair_cost_usd).toBeGreaterThan(0);
     expect(r.run.retries?.some((x) => x.startsWith("truncated scorecard.finding"))).toBe(true);
   });
 
-  it("truncates a combined parts field after one repair", async () => {
+  it("completes the run when the second repair shortens the field", async () => {
+    const long = "x".repeat(100);
+    create
+      .mockResolvedValueOnce(reply(JSON.stringify(draft(long))))
+      .mockResolvedValueOnce(reply(JSON.stringify(draft(long))))
+      .mockResolvedValueOnce(reply('{"scorecard.finding": "A licence is needed first."}'));
+    const r = await write();
+    expect(r.value).toEqual(draft("A licence is needed first."));
+    expect(create).toHaveBeenCalledTimes(3);
+    expect(r.run.repair_cost_usd).toBeGreaterThan(0);
+    expect(r.run.retries).toEqual([
+      "scorecard.finding: 100 characters, at most 56",
+      "scorecard.finding: 100 characters, at most 56",
+    ]);
+  });
+
+  it("fails after two repairs when a >50% overrun cannot be trimmed safely", async () => {
+    const parse = (json: unknown) => {
+      const t = stringAt(json, "price.text");
+      if (typeof t !== "string" || !t.trim()) throw new Error("price.text: expected a non-empty string");
+      if (t.length > 30) throw new Error(`price.text: ${t.length} characters, at most 30`);
+      return json;
+    };
+    const cited = { price: { text: "A mobile visit at the owner's door for $80 extra extra extra extra", source: "S1", estimate: null } };
+    create.mockResolvedValue(reply(JSON.stringify(cited)));
+    const err = await runWriter("alternatives", {
+      model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "alternatives-write.v3", parse,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WriterError);
+    expect(create).toHaveBeenCalledTimes(1 + LENGTH_REPAIR_ATTEMPTS);
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it("truncates a combined parts field after two repairs", async () => {
     const parse = (json: unknown) => {
       const reason = (json as { channels: { reason: { text: string }[] }[] }).channels?.[0]?.reason;
       if (!Array.isArray(reason)) throw new Error("channels[0].reason: expected an array");
@@ -215,7 +276,7 @@ describe("runWriter length recovery", () => {
       if (n > 55) throw new Error(`channels[0].reason: ${n} characters; with the cost text code adds, the reason parts may have at most 55`);
       return json;
     };
-    create.mockResolvedValue(reply(JSON.stringify({ channels: [{ reason: [{ text: "x".repeat(50) }, { text: "y".repeat(20) }] }] })));
+    create.mockResolvedValue(reply(JSON.stringify({ channels: [{ reason: [{ text: "x".repeat(60) }, { text: "y".repeat(40) }] }] })));
     const r = await runWriter("distribution", {
       model: "claude-sonnet-5-5", context: "ctx", sectionPrompt: "prompt", promptVersion: "distribution-write.v1", parse,
     });

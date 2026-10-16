@@ -23,17 +23,22 @@ const WRITER_EFFORT = "medium";
 /**
  * Writer calls allowed per section for structural errors: the first, plus two
  * retries that are told what failed. Length overruns on display-text fields are
- * different (see runWriter): a word-boundary trim when the overrun is tiny and
- * safe, otherwise one cheap repair, then a safe trim, so a 60-character
- * scorecard.finding does not kill the run.
+ * different (see runWriter): a word-boundary trim when the overrun is at most
+ * 50% over the cap and safe, otherwise up to two cheap repairs, then a safe
+ * trim, so a 60-character scorecard.finding does not kill the run.
+ *
+ * Two length repairs fit in these three attempts: the first write and the
+ * first repair can each request another call (`attempt < WRITE_ATTEMPTS`);
+ * the third attempt then trims or fails. Structural retries stay bounded
+ * here and do not need a higher cap.
  */
 export const WRITE_ATTEMPTS = 3;
 
-/** One extra writer call to shorten over-limit display-text fields. Then we trim if safe. */
-export const LENGTH_REPAIR_ATTEMPTS = 1;
+/** Extra writer calls to shorten over-limit display-text fields. Then we trim if safe. */
+export const LENGTH_REPAIR_ATTEMPTS = 2;
 
-/** Overruns this far over the cap (inclusive) are tiny: trim locally, no extra call. */
-export const TINY_OVERRUN_RATIO = 0.15;
+/** Overruns this far over the cap (inclusive) are trimmed locally, with no extra call. */
+export const TRIM_OVERRUN_RATIO = 0.5;
 
 /**
  * Merges a section's new sources into the shared store. Existing ids never
@@ -309,9 +314,9 @@ export function lengthOverrun(problem: string): LengthOverrun | null {
   return null;
 }
 
-/** True when `length` is at most 15% over `max` (a 60-character finding vs 56 is tiny). */
-export function isTinyOverrun(length: number, max: number): boolean {
-  return length <= Math.ceil(max * (1 + TINY_OVERRUN_RATIO));
+/** True when `length` is at most 50% over `max` (a 60-character finding vs 56 is trimmable). */
+export function isTrimmableOverrun(length: number, max: number): boolean {
+  return length <= Math.ceil(max * (1 + TRIM_OVERRUN_RATIO));
 }
 
 const FIGURE_TOKEN = /\$?\d[\d,]*(?:\.\d+)?(?:\s*[KkMm](?![A-Za-z]))?%?/g;
@@ -517,15 +522,16 @@ export interface Revision {
  * real section is the demand_evidence shape, and taking the stub would still
  * fail the run.
  *
- * A length overrun on a display-text field is not fatal. A tiny overrun
- * (≤ 15% over) is trimmed at a word boundary when that would not drop a cited
- * fact or figure. Otherwise one repair call asks the writer to shorten the
- * named fields (same cached research, no new searches); if they are still
- * over, a safe trim is applied. Repair never silently drops a cited fact or
- * figure: those fail the run if the writer cannot shorten them. Structural
- * errors (missing fields, wrong types, citation rules) still retry up to
- * WRITE_ATTEMPTS calls and then fail. When the problem is one text field in
- * its reply, the retry asks for that field alone and puts it into the last reply.
+ * A length overrun on a display-text field is not fatal. An overrun of at
+ * most 50% over the cap is trimmed at a word boundary when that would not
+ * drop a cited fact or figure. Otherwise up to two repair calls ask the
+ * writer to shorten the named fields (same cached research, no new searches);
+ * if they are still over, a safe trim is applied. Cited text and figure
+ * fields are never trimmed: those fail the run if the writer cannot shorten
+ * them. Structural errors (missing fields, wrong types, citation rules)
+ * still retry up to WRITE_ATTEMPTS calls and then fail. When the problem is
+ * one text field in its reply, the retry asks for that field alone and puts
+ * it into the last reply.
  */
 export async function runWriter<T>(
   stage: Stage,
@@ -610,9 +616,9 @@ export async function runWriter<T>(
       const overrun = last !== undefined ? lengthOverrun(problem) : null;
       if (overrun && last !== undefined) {
         const chars = overrunChars(last, overrun);
-        const tiny = chars != null && isTinyOverrun(chars, overrun.max);
+        const trimmable = chars != null && isTrimmableOverrun(chars, overrun.max);
         const tryTrim = () => recoverLength(last, parse, overrun);
-        if (tiny) {
+        if (trimmable) {
           const recovered = tryTrim();
           if (recovered) {
             retries.push(problem.slice(0, 500), ...recovered.notes);
