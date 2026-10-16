@@ -214,7 +214,7 @@ describe("section stages (Anthropic mocked)", () => {
   });
 
   it("writes from the shared context and retries an invalid write once", async () => {
-    const bad = { ...section, scorecard: { ...section.scorecard, finding: "x".repeat(80) } };
+    const bad = { ...section, scorecard: { ...section.scorecard, finding: "x".repeat(100) } };
     create.mockResolvedValueOnce(reply(JSON.stringify(bad))).mockResolvedValueOnce(reply(`\`\`\`json\n${JSON.stringify(section)}\n\`\`\``));
     const context = writerContext(spec, store, []);
     const r = await writeAlternatives(context, store);
@@ -226,7 +226,7 @@ describe("section stages (Anthropic mocked)", () => {
     expect(first.system[1].text).toContain(`at most ${SOURCE_BUDGETS.alternatives} distinct`);
     expect(first).not.toHaveProperty("output_config.format");
     const retry = create.mock.calls[1][0].messages;
-    expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: 80 characters, at most 56/);
+    expect(retry.at(-1).content).toMatch(/scorecard\.alternatives\.finding: 100 characters, at most 56/);
     expect(r.run).toMatchObject({ stage: "alternatives", step: "write", prompt_version: "writer-shared.v1+alternatives-write.v3" });
     expect(r.run.usage.input_tokens).toBe(2000);
   });

@@ -202,14 +202,14 @@ describe("writer retries", () => {
   });
 
   it("ask for only the field that failed and put it back into the last reply", async () => {
-    create.mockResolvedValueOnce(reply(JSON.stringify(draft("much too long")))).mockResolvedValueOnce(reply('{"tests[1].description": "short"}'));
+    create.mockResolvedValueOnce(reply(JSON.stringify(draft("much too long to keep")))).mockResolvedValueOnce(reply('{"tests[1].description": "short"}'));
     const r = await write();
     expect(r.value).toEqual(draft("short"));
     expect(create).toHaveBeenCalledTimes(2);
     const ask = (create.mock.calls[1][0] as Params).messages.at(-1)!.content;
     expect(ask).toContain("Rewrite only that field");
     expect(ask).toContain('{"tests[1].description": "..."}');
-    expect(r.run.retries).toEqual(["tests[1].description: 13 characters, at most 10"]);
+    expect(r.run.retries).toEqual(["tests[1].description: 21 characters, at most 10"]);
   });
 
   it("ask for the whole object again when the problem isn't one field of the reply", async () => {
